@@ -4,7 +4,6 @@
 #include <string>
 #include <algorithm>
 #include <cstring>
-#include "MinHook.h"
 #include "resource1.h" // defines IDR_CLIENTINFO
 
 // Global buffer for embedded clientinfo.xml
@@ -28,6 +27,8 @@ static bool load_rcdata(HMODULE hModule, int resId)
 // Original function pointers
 static HANDLE (WINAPI* fpCreateFileW)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) = nullptr;
 static BOOL   (WINAPI* fpReadFile)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED) = nullptr;
+static void** iatCreateFileW = nullptr;
+static void** iatReadFile = nullptr;
 
 // Helper to check for clientinfo.xml in path
 static bool is_clientinfo(LPCWSTR path)
@@ -67,27 +68,78 @@ static BOOL WINAPI HookReadFile(HANDLE hFile, LPVOID buffer, DWORD toRead,
     return fpReadFile(hFile, buffer, toRead, read, overlapped);
 }
 
+// Patch the IAT of the host module to point to our hooks
+static bool PatchIAT()
+{
+    BYTE* base = reinterpret_cast<BYTE*>(GetModuleHandleW(nullptr));
+    if (!base)
+        return false;
+
+    auto dos = reinterpret_cast<PIMAGE_DOS_HEADER>(base);
+    auto nt = reinterpret_cast<PIMAGE_NT_HEADERS>(base + dos->e_lfanew);
+    auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (!dir.Size)
+        return false;
+
+    auto desc = reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(base + dir.VirtualAddress);
+    for (; desc->Name; ++desc) {
+        const char* modName = reinterpret_cast<const char*>(base + desc->Name);
+        if (_stricmp(modName, "KERNEL32.dll") != 0)
+            continue;
+
+        auto thunk = reinterpret_cast<PIMAGE_THUNK_DATA>(base + desc->FirstThunk);
+        auto origThunk = reinterpret_cast<PIMAGE_THUNK_DATA>(base + desc->OriginalFirstThunk);
+        for (; origThunk->u1.AddressOfData; ++thunk, ++origThunk) {
+            if (origThunk->u1.Ordinal & IMAGE_ORDINAL_FLAG)
+                continue;
+            auto imp = reinterpret_cast<PIMAGE_IMPORT_BY_NAME>(base + origThunk->u1.AddressOfData);
+            const char* name = reinterpret_cast<const char*>(imp->Name);
+            if (std::strcmp(name, "CreateFileW") == 0) {
+                fpCreateFileW = reinterpret_cast<decltype(fpCreateFileW)>(thunk->u1.Function);
+                iatCreateFileW = reinterpret_cast<void**>(&thunk->u1.Function);
+            } else if (std::strcmp(name, "ReadFile") == 0) {
+                fpReadFile = reinterpret_cast<decltype(fpReadFile)>(thunk->u1.Function);
+                iatReadFile = reinterpret_cast<void**>(&thunk->u1.Function);
+            }
+        }
+        break;
+    }
+
+    if (!iatCreateFileW || !iatReadFile)
+        return false;
+
+    DWORD old;
+    VirtualProtect(iatCreateFileW, sizeof(void*), PAGE_READWRITE, &old);
+    *iatCreateFileW = reinterpret_cast<void*>(&HookCreateFileW);
+    VirtualProtect(iatCreateFileW, sizeof(void*), old, &old);
+
+    VirtualProtect(iatReadFile, sizeof(void*), PAGE_READWRITE, &old);
+    *iatReadFile = reinterpret_cast<void*>(&HookReadFile);
+    VirtualProtect(iatReadFile, sizeof(void*), old, &old);
+
+    return true;
+}
+
 bool InitClientInfoHooks(HMODULE module)
 {
     if (!load_rcdata(module, IDR_CLIENTINFO))
         return false;
-    if (MH_Initialize() != MH_OK)
-        return false;
-    if (MH_CreateHook(&CreateFileW, &HookCreateFileW, reinterpret_cast<LPVOID*>(&fpCreateFileW)) != MH_OK)
-        return false;
-    if (MH_CreateHook(&ReadFile, &HookReadFile, reinterpret_cast<LPVOID*>(&fpReadFile)) != MH_OK)
-        return false;
-    if (MH_EnableHook(&CreateFileW) != MH_OK)
-        return false;
-    if (MH_EnableHook(&ReadFile) != MH_OK)
-        return false;
-    return true;
+    return PatchIAT();
 }
 
 void UninitClientInfoHooks()
 {
-    MH_DisableHook(&CreateFileW);
-    MH_DisableHook(&ReadFile);
-    MH_Uninitialize();
+    if (iatCreateFileW && fpCreateFileW) {
+        DWORD old;
+        VirtualProtect(iatCreateFileW, sizeof(void*), PAGE_READWRITE, &old);
+        *iatCreateFileW = reinterpret_cast<void*>(fpCreateFileW);
+        VirtualProtect(iatCreateFileW, sizeof(void*), old, &old);
+    }
+    if (iatReadFile && fpReadFile) {
+        DWORD old;
+        VirtualProtect(iatReadFile, sizeof(void*), PAGE_READWRITE, &old);
+        *iatReadFile = reinterpret_cast<void*>(fpReadFile);
+        VirtualProtect(iatReadFile, sizeof(void*), old, &old);
+    }
 }
 
