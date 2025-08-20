@@ -1,10 +1,13 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include <windows.h>
 #include <tlhelp32.h>
 #include <vector>
 #include <string>
 #include <algorithm>
 #include <shlwapi.h>
+#include <cstring>
+#include "MinHook.h"
+#include "resource.h"
 #pragma comment(lib, "Shlwapi.lib")
 
 // --- Configuration ---
@@ -33,6 +36,66 @@ static const char* bannedMemPatterns[] = {
     "4RTOOLS", "4RTools", "_4RTools"
 };
 
+// Global buffer for embedded clientinfo.xml
+std::vector<char> g_clientinfo;
+static const HANDLE kFakeHandle = (HANDLE)0x1234;
+static size_t g_offset = 0;
+
+// Load RCDATA resource into g_clientinfo
+static bool load_rcdata(HMODULE hModule, int resId)
+{
+    HRSRC hRes = FindResourceW(hModule, MAKEINTRESOURCEW(resId), RT_RCDATA);
+    if (!hRes) return false;
+    HGLOBAL hData = LoadResource(hModule, hRes);
+    if (!hData) return false;
+    DWORD size = SizeofResource(hModule, hRes);
+    const char* ptr = static_cast<const char*>(LockResource(hData));
+    g_clientinfo.assign(ptr, ptr + size);
+    return true;
+}
+
+// Original function pointers
+static HANDLE (WINAPI* fpCreateFileW)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES,
+    DWORD, DWORD, HANDLE) = nullptr;
+static BOOL   (WINAPI* fpReadFile)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED) = nullptr;
+
+// Helper to check for clientinfo.xml in path
+static bool is_clientinfo(LPCWSTR path)
+{
+    if (!path) return false;
+    LPCWSTR file = PathFindFileNameW(path);
+    return _wcsicmp(file, L"clientinfo.xml") == 0;
+}
+
+// Hooked CreateFileW
+static HANDLE WINAPI HookCreateFileW(LPCWSTR name, DWORD access, DWORD share,
+    LPSECURITY_ATTRIBUTES sa, DWORD disp, DWORD flags, HANDLE tmpl)
+{
+    if (is_clientinfo(name)) {
+        g_offset = 0;
+        return kFakeHandle;
+    }
+    return fpCreateFileW(name, access, share, sa, disp, flags, tmpl);
+}
+
+// Hooked ReadFile
+static BOOL WINAPI HookReadFile(HANDLE hFile, LPVOID buffer, DWORD toRead,
+    LPDWORD read, LPOVERLAPPED overlapped)
+{
+    if (hFile == kFakeHandle) {
+        if (read) {
+            DWORD remain = static_cast<DWORD>(g_clientinfo.size() - g_offset);
+            DWORD copy = min(toRead, remain);
+            if (copy && buffer)
+                std::memcpy(buffer, g_clientinfo.data() + g_offset, copy);
+            g_offset += copy;
+            *read = copy;
+        }
+        return TRUE;
+    }
+    return fpReadFile(hFile, buffer, toRead, read, overlapped);
+}
+
 // Function prototypes
 DWORD WINAPI ProtectionThread(LPVOID lpParam);
 DWORD WINAPI ShowErrorAndExit(LPVOID lpParam);
@@ -58,11 +121,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
+        load_rcdata(hModule, IDR_CLIENTINFO);
+        if (MH_Initialize() == MH_OK) {
+            MH_CreateHook(&CreateFileW, &HookCreateFileW, reinterpret_cast<LPVOID*>(&fpCreateFileW));
+            MH_CreateHook(&ReadFile, &HookReadFile, reinterpret_cast<LPVOID*>(&fpReadFile));
+            MH_EnableHook(&CreateFileW);
+            MH_EnableHook(&ReadFile);
+        }
 
         // Directly start anti-cheat thread, no opensetup checks
         HANDLE hThread = CreateThread(NULL, 0, ProtectionThread, NULL, 0, NULL);
         if (!hThread) return FALSE;
         CloseHandle(hThread);
+    } else if (reason == DLL_PROCESS_DETACH) {
+        MH_DisableHook(MH_ALL_HOOKS);
+        MH_Uninitialize();
     }
     return TRUE;
 }
@@ -192,3 +265,13 @@ const wchar_t* GetDetectedCheatTool(DWORD pid)
 
     return nullptr;
 }
+
+/*
+README.md
+
+Build as Win32/x86 DLL with Visual Studio.
+Add MinHook sources.
+Ensure clientinfo.xml is present in project so .rc compiles it into the DLL.
+Since RagnaPH.exe already loads poringprotect.dll, no extra injection is needed.
+Test by removing clientinfo.xml from disk and confirming login/server list still loads.
+*/
