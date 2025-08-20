@@ -1,3 +1,4 @@
+#include "pch.h"
 #include <windows.h>
 #include <unordered_map>
 #include <vector>
@@ -191,7 +192,7 @@ static DWORD WINAPI hkGetFileAttributesW(LPCWSTR name) {
     return pGetFileAttributesW(name);
 }
 
-static void Hook(const wchar_t *mod, const char *name, LPVOID detour, LPVOID *orig) {
+static void Hook(LPCWSTR mod, LPCSTR name, LPVOID detour, LPVOID *orig) {
     if (HMODULE m = GetModuleHandleW(mod)) {
         if (FARPROC p = GetProcAddress(m, name)) {
             MH_CreateHook(p, detour, orig);
