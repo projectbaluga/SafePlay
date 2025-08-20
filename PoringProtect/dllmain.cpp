@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <shlwapi.h>
 #pragma comment(lib, "Shlwapi.lib")
+#include "clientinfo_hook.h"
 
 // --- Configuration ---
 static const wchar_t* bannedExes[] = {
@@ -58,11 +59,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
+        InitClientInfoHooks(hModule);
 
         // Directly start anti-cheat thread, no opensetup checks
         HANDLE hThread = CreateThread(NULL, 0, ProtectionThread, NULL, 0, NULL);
         if (!hThread) return FALSE;
         CloseHandle(hThread);
+    } else if (reason == DLL_PROCESS_DETACH) {
+        UninitClientInfoHooks();
     }
     return TRUE;
 }
