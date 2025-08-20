@@ -27,8 +27,12 @@ static bool load_rcdata(HMODULE hModule, int resId)
 // Original function pointers
 static HANDLE (WINAPI* fpCreateFileW)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) = nullptr;
 static BOOL   (WINAPI* fpReadFile)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED) = nullptr;
+static DWORD  (WINAPI* fpGetFileSize)(HANDLE, LPDWORD) = nullptr;
+static BOOL   (WINAPI* fpCloseHandle)(HANDLE) = nullptr;
 static void** iatCreateFileW = nullptr;
 static void** iatReadFile = nullptr;
+static void** iatGetFileSize = nullptr;
+static void** iatCloseHandle = nullptr;
 
 // Helper to check for clientinfo.xml in path
 static bool is_clientinfo(LPCWSTR path)
@@ -68,6 +72,24 @@ static BOOL WINAPI HookReadFile(HANDLE hFile, LPVOID buffer, DWORD toRead,
     return fpReadFile(hFile, buffer, toRead, read, overlapped);
 }
 
+// Hooked GetFileSize
+static DWORD WINAPI HookGetFileSize(HANDLE hFile, LPDWORD high)
+{
+    if (hFile == kFakeHandle) {
+        if (high) *high = 0;
+        return static_cast<DWORD>(g_clientinfo.size());
+    }
+    return fpGetFileSize(hFile, high);
+}
+
+// Hooked CloseHandle
+static BOOL WINAPI HookCloseHandle(HANDLE hFile)
+{
+    if (hFile == kFakeHandle)
+        return TRUE;
+    return fpCloseHandle(hFile);
+}
+
 // Patch the IAT of the host module to point to our hooks
 static bool PatchIAT()
 {
@@ -100,12 +122,18 @@ static bool PatchIAT()
             } else if (std::strcmp(name, "ReadFile") == 0) {
                 fpReadFile = reinterpret_cast<decltype(fpReadFile)>(thunk->u1.Function);
                 iatReadFile = reinterpret_cast<void**>(&thunk->u1.Function);
+            } else if (std::strcmp(name, "GetFileSize") == 0) {
+                fpGetFileSize = reinterpret_cast<decltype(fpGetFileSize)>(thunk->u1.Function);
+                iatGetFileSize = reinterpret_cast<void**>(&thunk->u1.Function);
+            } else if (std::strcmp(name, "CloseHandle") == 0) {
+                fpCloseHandle = reinterpret_cast<decltype(fpCloseHandle)>(thunk->u1.Function);
+                iatCloseHandle = reinterpret_cast<void**>(&thunk->u1.Function);
             }
         }
         break;
     }
 
-    if (!iatCreateFileW || !iatReadFile)
+    if (!iatCreateFileW || !iatReadFile || !iatGetFileSize || !iatCloseHandle)
         return false;
 
     DWORD old;
@@ -116,6 +144,14 @@ static bool PatchIAT()
     VirtualProtect(iatReadFile, sizeof(void*), PAGE_READWRITE, &old);
     *iatReadFile = reinterpret_cast<void*>(&HookReadFile);
     VirtualProtect(iatReadFile, sizeof(void*), old, &old);
+
+    VirtualProtect(iatGetFileSize, sizeof(void*), PAGE_READWRITE, &old);
+    *iatGetFileSize = reinterpret_cast<void*>(&HookGetFileSize);
+    VirtualProtect(iatGetFileSize, sizeof(void*), old, &old);
+
+    VirtualProtect(iatCloseHandle, sizeof(void*), PAGE_READWRITE, &old);
+    *iatCloseHandle = reinterpret_cast<void*>(&HookCloseHandle);
+    VirtualProtect(iatCloseHandle, sizeof(void*), old, &old);
 
     return true;
 }
@@ -140,6 +176,18 @@ void UninitClientInfoHooks()
         VirtualProtect(iatReadFile, sizeof(void*), PAGE_READWRITE, &old);
         *iatReadFile = reinterpret_cast<void*>(fpReadFile);
         VirtualProtect(iatReadFile, sizeof(void*), old, &old);
+    }
+    if (iatGetFileSize && fpGetFileSize) {
+        DWORD old;
+        VirtualProtect(iatGetFileSize, sizeof(void*), PAGE_READWRITE, &old);
+        *iatGetFileSize = reinterpret_cast<void*>(fpGetFileSize);
+        VirtualProtect(iatGetFileSize, sizeof(void*), old, &old);
+    }
+    if (iatCloseHandle && fpCloseHandle) {
+        DWORD old;
+        VirtualProtect(iatCloseHandle, sizeof(void*), PAGE_READWRITE, &old);
+        *iatCloseHandle = reinterpret_cast<void*>(fpCloseHandle);
+        VirtualProtect(iatCloseHandle, sizeof(void*), old, &old);
     }
 }
 
