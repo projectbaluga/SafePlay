@@ -6,7 +6,7 @@
 #include <cwctype>
 #include <cstring>
 #include "MinHook.h"
-#include "resource.h"
+#include "resource_clientinfo.h"
 
 struct VFile {
     std::vector<std::uint8_t> buf;
@@ -229,22 +229,15 @@ static DWORD WINAPI worker(LPVOID param) {
     return 0;
 }
 
-BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved) {
-    (void)reserved;
-    switch (reason) {
-    case DLL_PROCESS_ATTACH: {
-        DisableThreadLibraryCalls(module);
-        HANDLE th = CreateThread(nullptr, 0, worker, module, 0, nullptr);
-        if (th) {
-            CloseHandle(th);
-        }
-        break;
+void RagnaPH_Load(HMODULE module) {
+    HANDLE th = CreateThread(nullptr, 0, worker, module, 0, nullptr);
+    if (th) {
+        CloseHandle(th);
     }
-    case DLL_PROCESS_DETACH:
-        MH_DisableHook(MH_ALL_HOOKS);
-        MH_Uninitialize();
-        g_files.clear();
-        break;
-    }
-    return TRUE;
+}
+
+void RagnaPH_Unload() {
+    MH_DisableHook(MH_ALL_HOOKS);
+    MH_Uninitialize();
+    g_files.clear();
 }

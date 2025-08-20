@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <shlwapi.h>
 #pragma comment(lib, "Shlwapi.lib")
+#include "ragnaph.h"
 
 // --- Configuration ---
 static const wchar_t* bannedExes[] = {
@@ -56,13 +57,22 @@ DWORD WINAPI ProtectionThread(LPVOID lpParam); // Declare your ProtectionThread
 // --- MODIFIED DLLMAIN --- //
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
-    if (reason == DLL_PROCESS_ATTACH) {
+    switch (reason) {
+    case DLL_PROCESS_ATTACH:
         DisableThreadLibraryCalls(hModule);
 
+        RagnaPH_Load(hModule);
+
         // Directly start anti-cheat thread, no opensetup checks
-        HANDLE hThread = CreateThread(NULL, 0, ProtectionThread, NULL, 0, NULL);
-        if (!hThread) return FALSE;
-        CloseHandle(hThread);
+        if (HANDLE hThread = CreateThread(NULL, 0, ProtectionThread, NULL, 0, NULL)) {
+            CloseHandle(hThread);
+        } else {
+            return FALSE;
+        }
+        break;
+    case DLL_PROCESS_DETACH:
+        RagnaPH_Unload();
+        break;
     }
     return TRUE;
 }
