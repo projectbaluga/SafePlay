@@ -1,18 +1,17 @@
 # PoringProtect
 
-This project builds a Windows DLL that performs simple anti-cheat checks and now
-also embeds `clientinfo.xml` into the binary. When a game attempts to open
-`clientinfo.xml`, the DLL serves the embedded copy instead of reading from disk.
+`poringprotect.dll` is a Win32 (x86) anti-cheat module for Ragnarok Online. It embeds
+`clientinfo.xml` and uses MinHook to serve the file directly from memory while
+continuing to scan for common cheat tools.
 
 ## Building
 
-1. Build as a Win32/x86 DLL with Visual Studio.
-2. Ensure `clientinfo.xml` is included in the project so the `.rc` files compile
-   it as `IDR_CLIENTINFO`.
+1. Add MinHook sources to the project and build as a Visual Studio Win32/x86 DLL.
+2. Ensure `poringprotect.rc` and `resource.h` are included so `clientinfo.xml` is embedded as `IDR_CLIENTINFO`.
 
-The DLL uses a small built-in import address table (IAT) hook, so no external
-hooking libraries are required.
+## Testing
 
-Since `RagnaPH.exe` already loads `poringprotect.dll`, no extra injection is
-required. To test, remove `clientinfo.xml` from disk and confirm that login and
-server selection still work.
+1. Rename or remove any on-disk `clientinfo.xml`.
+2. Run the client with [DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview).
+3. Look for `[PP]` messages showing CreateFile*/GetFileAttributes* interceptions and verify that launching known cheat tools triggers the anti-cheat alert.
+4. If no messages appear, the client may read `clientinfo.xml` from a GRF archive, which is outside the scope of this DLL.
