@@ -82,7 +82,10 @@ static bool is_clientinfoA(LPCSTR name) {
         return false;
     }
     std::wstring wide(static_cast<std::size_t>(len), L'\0');
-    MultiByteToWideChar(CP_ACP, 0, name, -1, wide.data(), len);
+    // MultiByteToWideChar requires a writable buffer for the destination.
+    // In pre-C++17 standards, std::wstring::data() returns a const pointer,
+    // so use &wide[0] to obtain a modifiable buffer.
+    MultiByteToWideChar(CP_ACP, 0, name, -1, &wide[0], len);
     if (!wide.empty() && wide.back() == L'\0') {
         wide.pop_back();
     }
