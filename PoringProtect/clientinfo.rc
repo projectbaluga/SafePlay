@@ -1,0 +1,3 @@
+#include "resource1.h"
+
+IDR_CLIENTINFO RCDATA "clientinfo.xml"
