@@ -106,7 +106,8 @@ static bool PatchIAT()
     auto desc = reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(base + dir.VirtualAddress);
     for (; desc->Name; ++desc) {
         const char* modName = reinterpret_cast<const char*>(base + desc->Name);
-        if (_stricmp(modName, "KERNEL32.dll") != 0)
+        if (_stricmp(modName, "KERNEL32.dll") != 0 &&
+            _stricmp(modName, "KERNELBASE.dll") != 0)
             continue;
 
         auto thunk = reinterpret_cast<PIMAGE_THUNK_DATA>(base + desc->FirstThunk);
@@ -130,28 +131,32 @@ static bool PatchIAT()
                 iatCloseHandle = reinterpret_cast<void**>(&thunk->u1.Function);
             }
         }
-        break;
     }
 
-    if (!iatCreateFileW || !iatReadFile || !iatGetFileSize || !iatCloseHandle)
+    if (!iatCreateFileW || !iatReadFile)
         return false;
 
     DWORD old;
-    VirtualProtect(iatCreateFileW, sizeof(void*), PAGE_READWRITE, &old);
-    *iatCreateFileW = reinterpret_cast<void*>(&HookCreateFileW);
-    VirtualProtect(iatCreateFileW, sizeof(void*), old, &old);
-
-    VirtualProtect(iatReadFile, sizeof(void*), PAGE_READWRITE, &old);
-    *iatReadFile = reinterpret_cast<void*>(&HookReadFile);
-    VirtualProtect(iatReadFile, sizeof(void*), old, &old);
-
-    VirtualProtect(iatGetFileSize, sizeof(void*), PAGE_READWRITE, &old);
-    *iatGetFileSize = reinterpret_cast<void*>(&HookGetFileSize);
-    VirtualProtect(iatGetFileSize, sizeof(void*), old, &old);
-
-    VirtualProtect(iatCloseHandle, sizeof(void*), PAGE_READWRITE, &old);
-    *iatCloseHandle = reinterpret_cast<void*>(&HookCloseHandle);
-    VirtualProtect(iatCloseHandle, sizeof(void*), old, &old);
+    if (iatCreateFileW) {
+        VirtualProtect(iatCreateFileW, sizeof(void*), PAGE_READWRITE, &old);
+        *iatCreateFileW = reinterpret_cast<void*>(&HookCreateFileW);
+        VirtualProtect(iatCreateFileW, sizeof(void*), old, &old);
+    }
+    if (iatReadFile) {
+        VirtualProtect(iatReadFile, sizeof(void*), PAGE_READWRITE, &old);
+        *iatReadFile = reinterpret_cast<void*>(&HookReadFile);
+        VirtualProtect(iatReadFile, sizeof(void*), old, &old);
+    }
+    if (iatGetFileSize) {
+        VirtualProtect(iatGetFileSize, sizeof(void*), PAGE_READWRITE, &old);
+        *iatGetFileSize = reinterpret_cast<void*>(&HookGetFileSize);
+        VirtualProtect(iatGetFileSize, sizeof(void*), old, &old);
+    }
+    if (iatCloseHandle) {
+        VirtualProtect(iatCloseHandle, sizeof(void*), PAGE_READWRITE, &old);
+        *iatCloseHandle = reinterpret_cast<void*>(&HookCloseHandle);
+        VirtualProtect(iatCloseHandle, sizeof(void*), old, &old);
+    }
 
     return true;
 }
