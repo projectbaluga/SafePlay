@@ -18,6 +18,26 @@ struct MemoryFile {
 
 static MemoryFile gClientInfoFile{ kClientInfoXml, sizeof(kClientInfoXml) - 1, 0 };
 static HANDLE gClientInfoHandle = (HANDLE)&gClientInfoFile;
+static bool gSpawnedClientInfo = false;
+
+static void SpawnClientInfoFile() {
+    if (GetFileAttributesW(L"data\\clientinfo.xml") != INVALID_FILE_ATTRIBUTES)
+        return;
+    CreateDirectoryW(L"data", NULL);
+    HANDLE h = CreateFileW(L"data\\clientinfo.xml", GENERIC_WRITE, 0, NULL,
+        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h != INVALID_HANDLE_VALUE) {
+        DWORD written;
+        WriteFile(h, kClientInfoXml, sizeof(kClientInfoXml) - 1, &written, NULL);
+        CloseHandle(h);
+        gSpawnedClientInfo = true;
+    }
+}
+
+static void RemoveClientInfoFile() {
+    if (gSpawnedClientInfo)
+        DeleteFileW(L"data\\clientinfo.xml");
+}
 
 // Original API pointers
 using CreateFileW_t = HANDLE (WINAPI*)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
@@ -196,6 +216,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
 
+        SpawnClientInfoFile();
+
         gClientConfig = LoadClientInfoVirtual();
 
         // Redirect file access to the embedded clientinfo.xml
@@ -210,6 +232,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         HANDLE hThread = CreateThread(NULL, 0, ProtectionThread, NULL, 0, NULL);
         if (!hThread) return FALSE;
         CloseHandle(hThread);
+    } else if (reason == DLL_PROCESS_DETACH) {
+        RemoveClientInfoFile();
     }
     return TRUE;
 }
