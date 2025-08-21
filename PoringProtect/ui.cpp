@@ -248,7 +248,6 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         return 0; }
     case WM_DESTROY:
         delete data;
-        PostQuitMessage(0);
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -262,33 +261,27 @@ void CreateControlWindow() {
     if (!g_gameWnd)
         return;
 
-    WNDCLASSW wc{}; wc.lpfnWndProc = ControlProc; wc.hInstance = GetModuleHandleW(NULL);
-    wc.lpszClassName = L"RagnaControlWnd"; wc.style = CS_DROPSHADOW;
+    WNDCLASSW wc{};
+    wc.lpfnWndProc   = ControlProc;
+    wc.hInstance     = GetModuleHandleW(NULL);
+    wc.lpszClassName = L"RagnaControlWnd";
+    wc.style         = CS_DROPSHADOW;
     RegisterClassW(&wc);
 
-    const int width = 240, height = 120;
+    const int width  = 240;
+    const int height = 120;
 
-    HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"", WS_CHILD,
-        0, 0, width, height, g_gameWnd, NULL, wc.hInstance, NULL);
-    if (!hwnd) return;
-
-    SetParent(hwnd, g_gameWnd);
-    RECT rcParent; GetClientRect(g_gameWnd, &rcParent);
+    RECT rcParent;
+    GetClientRect(g_gameWnd, &rcParent);
     int x = rcParent.right - width - 24;
     int y = rcParent.bottom - height - 24;
-    SetWindowPos(hwnd, NULL, x, y, width, height, SWP_SHOWWINDOW);
 
-    HRGN rgn = CreateRoundRectRgn(0, 0, width, height, 32, 32);
-    SetWindowRgn(hwnd, rgn, FALSE);
-    ShowWindow(hwnd, SW_SHOW);
-    UpdateWindow(hwnd);
-
-    MSG msg;
-    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+    HWND hwnd = CreateWindowExW(
+        0, wc.lpszClassName, L"", WS_CHILD | WS_VISIBLE,
+        x, y, width, height, g_gameWnd, NULL, wc.hInstance, NULL);
+    if (hwnd) {
+        UpdateWindow(hwnd);
     }
-    UnregisterClassW(wc.lpszClassName, wc.hInstance);
 }
 
 // Thread that runs loader then control window
@@ -297,7 +290,6 @@ static DWORD WINAPI UIThread(LPVOID) {
     GdiplusStartup(&token, &gsi, NULL);
     CreateLoaderWindow();
     CreateControlWindow();
-    GdiplusShutdown(token);
     return 0;
 }
 
