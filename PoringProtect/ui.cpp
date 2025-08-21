@@ -22,11 +22,11 @@ void TriggerAuto() {
 
 // ---------------- Loader Window ----------------
 struct LoaderData {
-    int   progress;
-    DWORD startTime;
-    int   finalX;
-    int   finalY;
-    BYTE  finalAlpha;
+    int        progress;
+    ULONGLONG  startTime;
+    int        finalX;
+    int        finalY;
+    BYTE       finalAlpha;
 };
 
 static LRESULT CALLBACK LoaderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -42,7 +42,7 @@ static LRESULT CALLBACK LoaderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         return 0;
     case WM_TIMER:
         if (wParam == 1) {
-            DWORD now = GetTickCount();
+            ULONGLONG now = GetTickCount64();
             float t = (now - data->startTime) / 250.0f;
             if (t >= 1.0f) { t = 1.0f; KillTimer(hwnd, 1); }
             int y = data->finalY + (int)((1.0f - t) * 120);
@@ -55,11 +55,11 @@ static LRESULT CALLBACK LoaderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             InvalidateRect(hwnd, NULL, FALSE);
             if (data->progress >= 100) {
                 KillTimer(hwnd, 2);
-                data->startTime = GetTickCount();
+                data->startTime = GetTickCount64();
                 SetTimer(hwnd, 3, 15, NULL);  // fade-out
             }
         } else if (wParam == 3) {
-            DWORD now = GetTickCount();
+            ULONGLONG now = GetTickCount64();
             float t = (now - data->startTime) / 150.0f;
             if (t >= 1.0f) {
                 DestroyWindow(hwnd);
@@ -117,7 +117,7 @@ void CreateLoaderWindow() {
     wc.lpszClassName = L"RagnaLoaderWnd"; wc.style = CS_DROPSHADOW;
     RegisterClassW(&wc);
 
-    LoaderData data{}; data.progress = 0; data.startTime = GetTickCount();
+    LoaderData data{}; data.progress = 0; data.startTime = GetTickCount64();
     data.finalAlpha = (BYTE)(255 * 85 / 100);
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
