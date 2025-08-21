@@ -193,6 +193,23 @@ static ClientConfig LoadClientInfoVirtual() {
 
 static ClientConfig gClientConfig;
 
+static bool VerifyDataIni() {
+    char path[MAX_PATH];
+    if (!GetModuleFileNameA(NULL, path, MAX_PATH))
+        return false;
+    PathRemoveFileSpecA(path);
+    strcat_s(path, "\\Data.ini");
+
+    char buf[MAX_PATH];
+    if (GetPrivateProfileStringA("Data", "0", "", buf, sizeof(buf), path) == 0 || _stricmp(buf, "RagnaPH.grf") != 0)
+        return false;
+    if (GetPrivateProfileStringA("Data", "1", "", buf, sizeof(buf), path) == 0 || _stricmp(buf, "en.grf") != 0)
+        return false;
+    if (GetPrivateProfileStringA("Data", "2", "", buf, sizeof(buf), path) == 0 || _stricmp(buf, "data.grf") != 0)
+        return false;
+    return true;
+}
+
 // Function prototypes
 DWORD WINAPI ProtectionThread(LPVOID lpParam);
 DWORD WINAPI ShowErrorAndExit(LPVOID lpParam);
@@ -220,6 +237,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         DisableThreadLibraryCalls(hModule);
 
         gClientConfig = LoadClientInfoVirtual();
+
+        if (!VerifyDataIni()) {
+            MessageBoxW(NULL, L"DATA.ini is missing or invalid.", L"RagnaPH Anti-Cheat", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+            return FALSE;
+        }
 
         // Redirect file access to the embedded clientinfo.xml
         HookIAT("KERNEL32.dll", "CreateFileW", (void*)HookedCreateFileW, (void**)&RealCreateFileW);
