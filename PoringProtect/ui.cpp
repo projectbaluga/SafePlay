@@ -248,7 +248,6 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         return 0; }
     case WM_DESTROY:
         delete data;
-        PostQuitMessage(0);
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -263,46 +262,43 @@ void CreateControlWindow() {
         return;
 
     WNDCLASSW wc{}; wc.lpfnWndProc = ControlProc; wc.hInstance = GetModuleHandleW(NULL);
-    wc.lpszClassName = L"RagnaControlWnd"; wc.style = CS_DROPSHADOW;
+    wc.lpszClassName = L"RagnaControlWnd";
     RegisterClassW(&wc);
 
     const int width = 240, height = 120;
 
-    HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"", WS_CHILD,
-        0, 0, width, height, g_gameWnd, NULL, wc.hInstance, NULL);
-    if (!hwnd) return;
-
-    SetParent(hwnd, g_gameWnd);
     RECT rcParent; GetClientRect(g_gameWnd, &rcParent);
     int x = rcParent.right - width - 24;
     int y = rcParent.bottom - height - 24;
-    SetWindowPos(hwnd, NULL, x, y, width, height, SWP_SHOWWINDOW);
 
-    HRGN rgn = CreateRoundRectRgn(0, 0, width, height, 32, 32);
-    SetWindowRgn(hwnd, rgn, FALSE);
-    ShowWindow(hwnd, SW_SHOW);
+    HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"", WS_CHILD | WS_VISIBLE,
+        x, y, width, height, g_gameWnd, NULL, wc.hInstance, NULL);
+    if (!hwnd) return;
+
     UpdateWindow(hwnd);
-
-    MSG msg;
-    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-    UnregisterClassW(wc.lpszClassName, wc.hInstance);
 }
 
-// Thread that runs loader then control window
-static DWORD WINAPI UIThread(LPVOID) {
-    GdiplusStartupInput gsi; ULONG_PTR token;
-    GdiplusStartup(&token, &gsi, NULL);
+// Dedicated thread used only for the temporary loader splash
+static DWORD WINAPI LoaderThread(LPVOID) {
     CreateLoaderWindow();
-    CreateControlWindow();
-    GdiplusShutdown(token);
     return 0;
 }
 
 // Entry for external callers (used by DllMain)
 void StartUIThread() {
-    HANDLE h = CreateThread(NULL, 0, UIThread, NULL, 0, NULL);
-    if (h) CloseHandle(h);
+    // Initialize GDI+ once for the lifetime of the UI components
+    static ULONG_PTR token = 0;
+    if (!token) {
+        GdiplusStartupInput gsi; GdiplusStartup(&token, &gsi, NULL);
+    }
+
+    // Show loader on a background thread so it has its own message loop
+    HANDLE h = CreateThread(NULL, 0, LoaderThread, NULL, 0, NULL);
+    if (h) {
+        WaitForSingleObject(h, INFINITE);
+        CloseHandle(h);
+    }
+
+    // Create the in-game control panel on the game client's thread
+    CreateControlWindow();
 }
