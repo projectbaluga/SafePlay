@@ -11,6 +11,7 @@
 #pragma comment(lib, "Comctl32.lib")
 #pragma comment(lib, "Msimg32.lib")
 #include "clientinfo.h"
+#include "ui.h"
 
 // --- Virtual clientinfo.xml handling ---
 struct MemoryFile {
@@ -457,21 +458,14 @@ static void ShowStatusPopup(const wchar_t* text)
 // DLL entry point
 DWORD WINAPI ProtectionThread(LPVOID lpParam); // Declare your ProtectionThread
 
-// Run loading popup on a separate thread so game can initialize concurrently
-static DWORD WINAPI LoadingPopupThread(LPVOID) {
-    ShowStatusPopup(L"Loading...");
-    return 0;
-}
-
 // --- MODIFIED DLLMAIN --- //
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
 
-        // Show loading popup without blocking game startup
-        HANDLE hPopup = CreateThread(NULL, 0, LoadingPopupThread, NULL, 0, NULL);
-        if (hPopup) CloseHandle(hPopup);
+        // Launch loader UI which transitions to control window
+        StartUIThread();
 
         gClientConfig = LoadClientInfoVirtual();
 
