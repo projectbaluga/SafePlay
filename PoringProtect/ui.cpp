@@ -8,6 +8,8 @@ using namespace Gdiplus;
 
 // Global toggle for automation state
 bool g_autoEnabled = false;
+// Cached handle to the game window
+static HWND g_gameWnd = nullptr;
 
 // Helper to build rounded rectangles with GDI+
 static void AddRoundRect(GraphicsPath& path, const Rect& r, int radius) {
@@ -25,9 +27,13 @@ void TriggerAuto() {
     g_autoEnabled = !g_autoEnabled;
 
     // Attempt to notify Ragnarok client via custom message
-    HWND gameWnd = FindWindowW(L"Ragnarok", nullptr);
-    if (gameWnd) {
-        PostMessageW(gameWnd, WM_APP + 1, g_autoEnabled, 0);
+    if (!g_gameWnd) {
+        g_gameWnd = FindWindowW(NULL, L"RagnaPH");
+        if (!g_gameWnd)
+            g_gameWnd = FindWindowW(L"Ragnarok", nullptr);
+    }
+    if (g_gameWnd) {
+        PostMessageW(g_gameWnd, WM_APP + 1, g_autoEnabled, 0);
     }
 
     // Provide feedback to the user
@@ -192,7 +198,7 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             InvalidateRect(hwnd, &data->btnRect, FALSE);
         }
         return 0; }
-    case WM_LBUTTONUP: {
+    case WM_LBUTTONDOWN: {
         POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         if (PtInRect(&data->btnRect, pt)) {
             TriggerAuto();
@@ -203,15 +209,26 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         PAINTSTRUCT ps; HDC hdc = BeginPaint(hwnd, &ps);
         Graphics g(hdc); g.SetSmoothingMode(SmoothingModeAntiAlias);
         RECT rc; GetClientRect(hwnd, &rc);
+        int w = rc.right - rc.left;
+        int h = rc.bottom - rc.top;
+
+        // Drop shadow
+        GraphicsPath shadowPath; AddRoundRect(shadowPath, Rect(4, 4, w - 4, h - 4), 16);
+        SolidBrush shadowBrush(Color(0x60, 0, 0, 0));
+        g.FillPath(&shadowBrush, &shadowPath);
+
+        // Background
+        GraphicsPath bgPath; AddRoundRect(bgPath, Rect(0, 0, w - 4, h - 4), 16);
         SolidBrush bg(Color(0xFF, 0x2B, 0x2B, 0x2B));
-        Rect clientRect(rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top);
-        g.FillRectangle(&bg, clientRect);
+        g.FillPath(&bg, &bgPath);
 
-        FontFamily ff(L"Segoe UI");
-        Font title(&ff, 14, FontStyleBold, UnitPoint);
+        // Title
+        FontFamily ffTitle(L"Segoe UI Semibold");
+        Font title(&ffTitle, 12, FontStyleRegular, UnitPoint);
         SolidBrush white(Color(0xFF, 0xFF, 0xFF, 0xFF));
-        g.DrawString(L"RagnaPH Anti-Cheat", -1, &title, PointF(16.f, 12.f), &white);
+        g.DrawString(L"RagnaPH Anti-Cheat", -1, &title, PointF(16.f, 8.f), &white);
 
+        // Button
         Color btnCol = data->hover ? Color(0xFF, 0x5A, 0xA0, 0xF2) : Color(0xFF, 0x4A, 0x90, 0xE2);
         GraphicsPath path; AddRoundRect(path, Rect(data->btnRect.left, data->btnRect.top,
             data->btnRect.right - data->btnRect.left,
@@ -219,7 +236,8 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         SolidBrush btnBrush(btnCol);
         g.FillPath(&btnBrush, &path);
 
-        Font btnFont(&ff, 12, FontStyleRegular, UnitPoint);
+        FontFamily ffBtn(L"Segoe UI");
+        Font btnFont(&ffBtn, 12, FontStyleRegular, UnitPoint);
         RectF textRect((REAL)data->btnRect.left, (REAL)data->btnRect.top,
             (REAL)(data->btnRect.right - data->btnRect.left),
             (REAL)(data->btnRect.bottom - data->btnRect.top));
@@ -237,25 +255,32 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 }
 
 void CreateControlWindow() {
+    // Locate game window
+    g_gameWnd = FindWindowW(NULL, L"RagnaPH");
+    if (!g_gameWnd)
+        g_gameWnd = FindWindowW(L"Ragnarok", NULL);
+    if (!g_gameWnd)
+        return;
+
     WNDCLASSW wc{}; wc.lpfnWndProc = ControlProc; wc.hInstance = GetModuleHandleW(NULL);
     wc.lpszClassName = L"RagnaControlWnd"; wc.style = CS_DROPSHADOW;
     RegisterClassW(&wc);
 
     const int width = 240, height = 120;
-    int screenW = GetSystemMetrics(SM_CXSCREEN);
-    int screenH = GetSystemMetrics(SM_CYSCREEN);
-    int x = screenW - width - 24;
-    int y = screenH - height - 24;
 
-    HWND hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
-        wc.lpszClassName, L"", WS_POPUP,
-        x, y, width, height, NULL, NULL, wc.hInstance, NULL);
+    HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"", WS_CHILD,
+        0, 0, width, height, g_gameWnd, NULL, wc.hInstance, NULL);
     if (!hwnd) return;
+
+    SetParent(hwnd, g_gameWnd);
+    RECT rcParent; GetClientRect(g_gameWnd, &rcParent);
+    int x = rcParent.right - width - 24;
+    int y = rcParent.bottom - height - 24;
+    SetWindowPos(hwnd, NULL, x, y, width, height, SWP_SHOWWINDOW);
 
     HRGN rgn = CreateRoundRectRgn(0, 0, width, height, 32, 32);
     SetWindowRgn(hwnd, rgn, FALSE);
-    SetLayeredWindowAttributes(hwnd, 0, (BYTE)(255 * 90 / 100), LWA_ALPHA);
-    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
 
     MSG msg;
