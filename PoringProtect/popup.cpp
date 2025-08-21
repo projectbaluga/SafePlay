@@ -1,5 +1,6 @@
 #include "pch.h"
 #include <windows.h>
+#include <windowsx.h>
 #include <gdiplus.h>
 #pragma comment(lib, "gdiplus.lib")
 
@@ -109,7 +110,7 @@ static void Render(HWND hWnd) {
     StringFormat fmt;
     fmt.SetAlignment(StringAlignmentCenter);
     fmt.SetLineAlignment(StringAlignmentCenter);
-    g.DrawString(L"Enable Auto", -1, &ffSub, btnRc, &fmt, &btnTextBrush);
+    g.DrawString(L"Enable Auto", -1, &fSub, btnRc, &fmt, &btnTextBrush);
 
     POINT ptSrc = {0,0};
     SIZE sizeWnd = {WINDOW_WIDTH, WINDOW_HEIGHT};
@@ -148,7 +149,7 @@ static LRESULT CALLBACK PopupProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     case WM_MOUSEMOVE: {
         POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         Rect btn(90, 100, 120, 36);
-        bool hover = btn.Contains(pt);
+        bool hover = btn.Contains(pt.x, pt.y);
         if (hover != g_state.hover) {
             g_state.hover = hover;
             Render(hWnd);
@@ -158,7 +159,7 @@ static LRESULT CALLBACK PopupProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     case WM_LBUTTONDOWN: {
         POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         Rect btn(90, 100, 120, 36);
-        if (btn.Contains(pt)) {
+        if (btn.Contains(pt.x, pt.y)) {
             g_state.clicked = true;
             TriggerAuto();
             DestroyWindow(hWnd);
