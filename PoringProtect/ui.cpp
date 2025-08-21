@@ -1,5 +1,6 @@
 #include "pch.h"
 #include <windows.h>
+#include <windowsx.h>
 #include <gdiplus.h>
 #include <string>
 #pragma comment(lib, "Gdiplus.lib")
@@ -75,7 +76,8 @@ static LRESULT CALLBACK LoaderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         RECT rc; GetClientRect(hwnd, &rc);
         SolidBrush bg(Color(0xFF, 0x2B, 0x2B, 0x2B));
-        g.FillRectangle(&bg, rc.left, rc.top, rc.right, rc.bottom);
+        g.FillRectangle(&bg, rc.left, rc.top,
+            rc.right - rc.left, rc.bottom - rc.top);
 
         FontFamily ff(L"Segoe UI");
         Font title(&ff, 14, FontStyleBold, UnitPoint);
@@ -183,7 +185,8 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         Graphics g(hdc); g.SetSmoothingMode(SmoothingModeAntiAlias);
         RECT rc; GetClientRect(hwnd, &rc);
         SolidBrush bg(Color(0xFF, 0x2B, 0x2B, 0x2B));
-        g.FillRectangle(&bg, rc.left, rc.top, rc.right, rc.bottom);
+        g.FillRectangle(&bg, rc.left, rc.top,
+            rc.right - rc.left, rc.bottom - rc.top);
 
         FontFamily ff(L"Segoe UI");
         Font title(&ff, 14, FontStyleBold, UnitPoint);
