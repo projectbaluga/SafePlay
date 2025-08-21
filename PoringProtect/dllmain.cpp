@@ -10,6 +10,8 @@
 #include <commctrl.h>
 #pragma comment(lib, "Comctl32.lib")
 #pragma comment(lib, "Msimg32.lib")
+#include <gdiplus.h>
+#pragma comment(lib, "Gdiplus.lib")
 #include "clientinfo.h"
 
 // --- Virtual clientinfo.xml handling ---
@@ -40,6 +42,7 @@ static SetFilePointer_t     RealSetFilePointer;
 static CloseHandle_t        RealCloseHandle;
 static GetFileAttributesW_t RealGetFileAttributesW;
 static GetFileAttributesA_t RealGetFileAttributesA;
+static ULONG_PTR gGdiplusToken;
 
 // Helper to patch IAT entries in the host module
 static void HookIAT(const char* dll, const char* name, void* hook, void** orig) {
@@ -302,6 +305,8 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         HDC hdc = BeginPaint(hwnd, &ps);
         RECT rc;
         GetClientRect(hwnd, &rc);
+        Gdiplus::Graphics gfx(hdc);
+        gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
         TRIVERTEX vert[2] = {
             { rc.left, rc.top,   0x2B * 256, 0x2B * 256, 0x2B * 256, 0xFFFF },
@@ -313,11 +318,9 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         int iconSize = 32;
         int circleX = 16;
         int circleY = (POPUP_HEIGHT - iconSize) / 2;
-        HBRUSH badge = CreateSolidBrush(RGB(0x3A, 0x3A, 0x3A));
-        HGDIOBJ old = SelectObject(hdc, badge);
-        Ellipse(hdc, circleX, circleY, circleX + iconSize, circleY + iconSize);
-        SelectObject(hdc, old);
-        DeleteObject(badge);
+        Gdiplus::SolidBrush badgeBrush(Gdiplus::Color(0xFF, 0x3A, 0x3A, 0x3A));
+        gfx.FillEllipse(&badgeBrush, (Gdiplus::REAL)circleX, (Gdiplus::REAL)circleY,
+                        (Gdiplus::REAL)iconSize, (Gdiplus::REAL)iconSize);
 
         HICON icon = LoadIconW(NULL, MAKEINTRESOURCEW(32518)); // IDI_SHIELD
         DrawIconEx(hdc, circleX, circleY, icon, iconSize, iconSize, 0, NULL, DI_NORMAL);
@@ -360,28 +363,32 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         int barX = PROGRESS_PADDING;
         int barY = rcSub.bottom + 8;
 
-        HPEN oldPen = (HPEN)SelectObject(hdc, GetStockObject(NULL_PEN));
-        HBRUSH trackBrush = CreateSolidBrush(RGB(0x3A, 0x3A, 0x3A));
-        HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, trackBrush);
-        RoundRect(hdc, barX, barY, barX + barWidth, barY + PROGRESS_HEIGHT,
-            PROGRESS_RADIUS * 2, PROGRESS_RADIUS * 2);
-        SelectObject(hdc, oldBrush);
-        DeleteObject(trackBrush);
+        Gdiplus::GraphicsPath trackPath;
+        Gdiplus::REAL x = (Gdiplus::REAL)barX;
+        Gdiplus::REAL y = (Gdiplus::REAL)barY;
+        Gdiplus::REAL w = (Gdiplus::REAL)barWidth;
+        Gdiplus::REAL h = (Gdiplus::REAL)PROGRESS_HEIGHT;
+        Gdiplus::REAL r = (Gdiplus::REAL)PROGRESS_RADIUS;
+        trackPath.AddArc(x, y, r*2, r*2, 180, 90);
+        trackPath.AddArc(x + w - r*2, y, r*2, r*2, 270, 90);
+        trackPath.AddArc(x + w - r*2, y + h - r*2, r*2, r*2, 0, 90);
+        trackPath.AddArc(x, y + h - r*2, r*2, r*2, 90, 90);
+        trackPath.CloseFigure();
+
+        Gdiplus::SolidBrush trackBrush(Gdiplus::Color(0xFF, 0x3A, 0x3A, 0x3A));
+        gfx.FillPath(&trackBrush, &trackPath);
 
         int fillWidth = barWidth * data->progress / 100;
         if (fillWidth > 0) {
-            HRGN clip = CreateRoundRectRgn(barX, barY, barX + barWidth,
-                barY + PROGRESS_HEIGHT, PROGRESS_RADIUS * 2, PROGRESS_RADIUS * 2);
-            SelectClipRgn(hdc, clip);
-            TRIVERTEX pvert[2] = {
-                { barX, barY, 0x4A * 256, 0x90 * 256, 0xE2 * 256, 0xFFFF },
-                { barX + fillWidth, barY + PROGRESS_HEIGHT,
-                  0x35 * 256, 0x7A * 256, 0xBD * 256, 0xFFFF }
-            };
-            GRADIENT_RECT pg = { 0,1 };
-            GradientFill(hdc, pvert, 2, &pg, 1, GRADIENT_FILL_RECT_H);
-            SelectClipRgn(hdc, NULL);
-            DeleteObject(clip);
+            gfx.SetClip(&trackPath);
+            Gdiplus::Rect fillRect(barX, barY, fillWidth, PROGRESS_HEIGHT);
+            Gdiplus::LinearGradientBrush pbrush(
+                fillRect,
+                Gdiplus::Color(0xFF, 0x4A, 0x90, 0xE2),
+                Gdiplus::Color(0xFF, 0x35, 0x7A, 0xBD),
+                Gdiplus::LinearGradientModeHorizontal);
+            gfx.FillRectangle(&pbrush, fillRect);
+            gfx.ResetClip();
         }
 
         HFONT barFont = CreateFontW(-MulDiv(10, dpi, 72), 0, 0, 0, FW_NORMAL,
@@ -394,8 +401,6 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         DrawTextW(hdc, pct.c_str(), -1, &rcPct,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         DeleteObject(barFont);
-
-        SelectObject(hdc, oldPen);
 
         DeleteObject(titleFont);
         DeleteObject(subFont);
@@ -469,6 +474,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
 
+        Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+        Gdiplus::GdiplusStartup(&gGdiplusToken, &gdiplusStartupInput, NULL);
+
         // Show loading popup without blocking game startup
         HANDLE hPopup = CreateThread(NULL, 0, LoadingPopupThread, NULL, 0, NULL);
         if (hPopup) CloseHandle(hPopup);
@@ -494,6 +502,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         HANDLE hThread = CreateThread(NULL, 0, ProtectionThread, NULL, 0, NULL);
         if (!hThread) return FALSE;
         CloseHandle(hThread);
+    } else if (reason == DLL_PROCESS_DETACH) {
+        Gdiplus::GdiplusShutdown(gGdiplusToken);
     }
     return TRUE;
 }
