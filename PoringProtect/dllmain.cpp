@@ -236,12 +236,17 @@ struct PopupData {
     int finalX;
     int finalY;
     BYTE finalAlpha;
+    int progress;
 };
 
 static const int POPUP_WIDTH  = 300;
 static const int POPUP_HEIGHT = 120;
 static const int POPUP_MARGIN = 24;
 static const int POPUP_RADIUS = 16;
+static const int PROGRESS_HEIGHT = 12;
+static const int PROGRESS_PADDING = 16;
+static const int PROGRESS_RADIUS = 6;
+static const int PROGRESS_STEP = 2;
 
 static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -253,6 +258,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         return TRUE;
     case WM_CREATE:
         SetTimer(hwnd, 1, 15, NULL); // entry animation
+        SetTimer(hwnd, 2, 50, NULL); // progress update (~20 FPS)
         return 0;
     case WM_TIMER:
         if (wParam == 1) {
@@ -261,7 +267,6 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             if (t >= 1.0f) {
                 t = 1.0f;
                 KillTimer(hwnd, 1);
-                SetTimer(hwnd, 2, 5000, NULL); // auto-close
             }
             int y = data->finalY + (int)((1.0f - t) * POPUP_HEIGHT);
             BYTE a = (BYTE)(data->finalAlpha * t);
@@ -269,9 +274,13 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             SetWindowPos(hwnd, NULL, data->finalX, y, 0, 0,
                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         } else if (wParam == 2) {
-            KillTimer(hwnd, 2);
-            data->startTime = GetTickCount();
-            SetTimer(hwnd, 3, 15, NULL); // fade-out
+            data->progress = min(100, data->progress + PROGRESS_STEP);
+            InvalidateRect(hwnd, NULL, FALSE);
+            if (data->progress >= 100) {
+                KillTimer(hwnd, 2);
+                data->startTime = GetTickCount();
+                SetTimer(hwnd, 3, 15, NULL); // fade-out
+            }
         } else if (wParam == 3) {
             DWORD now = GetTickCount();
             float t = (now - data->startTime) / 150.0f;
@@ -336,7 +345,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         DrawTextW(hdc, data->status.c_str(), -1, &calc, DT_CALCRECT);
         int subH = calc.bottom;
 
-        int textHeight = titleH + 8 + subH;
+        int textHeight = titleH + 8 + subH + 8 + PROGRESS_HEIGHT;
         int textY = (POPUP_HEIGHT - textHeight) / 2;
 
         RECT rcTitle{ textX, textY, textX + textWidth, textY + titleH };
@@ -348,6 +357,47 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         SelectObject(hdc, subFont);
         SetTextColor(hdc, RGB(0xCF, 0xCF, 0xCF));
         DrawTextW(hdc, data->status.c_str(), -1, &rcSub, DT_LEFT | DT_TOP);
+
+        int barWidth = rc.right - PROGRESS_PADDING * 2;
+        int barX = PROGRESS_PADDING;
+        int barY = rcSub.bottom + 8;
+
+        HPEN oldPen = (HPEN)SelectObject(hdc, GetStockObject(NULL_PEN));
+        HBRUSH trackBrush = CreateSolidBrush(RGB(0x3A, 0x3A, 0x3A));
+        HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, trackBrush);
+        RoundRect(hdc, barX, barY, barX + barWidth, barY + PROGRESS_HEIGHT,
+            PROGRESS_RADIUS * 2, PROGRESS_RADIUS * 2);
+        SelectObject(hdc, oldBrush);
+        DeleteObject(trackBrush);
+
+        int fillWidth = barWidth * data->progress / 100;
+        if (fillWidth > 0) {
+            HRGN clip = CreateRoundRectRgn(barX, barY, barX + barWidth,
+                barY + PROGRESS_HEIGHT, PROGRESS_RADIUS * 2, PROGRESS_RADIUS * 2);
+            SelectClipRgn(hdc, clip);
+            TRIVERTEX pvert[2] = {
+                { barX, barY, 0x4A * 256, 0x90 * 256, 0xE2 * 256, 0xFFFF },
+                { barX + fillWidth, barY + PROGRESS_HEIGHT,
+                  0x35 * 256, 0x7A * 256, 0xBD * 256, 0xFFFF }
+            };
+            GRADIENT_RECT pg = { 0,1 };
+            GradientFill(hdc, pvert, 2, &pg, 1, GRADIENT_FILL_RECT_H);
+            SelectClipRgn(hdc, NULL);
+            DeleteObject(clip);
+        }
+
+        HFONT barFont = CreateFontW(-MulDiv(10, dpi, 72), 0, 0, 0, FW_NORMAL,
+            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+        SelectObject(hdc, barFont);
+        SetTextColor(hdc, RGB(0xCF, 0xCF, 0xCF));
+        std::wstring pct = std::to_wstring(data->progress) + L"%";
+        RECT rcPct{ barX, barY, barX + barWidth, barY + PROGRESS_HEIGHT };
+        DrawTextW(hdc, pct.c_str(), -1, &rcPct,
+            DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        DeleteObject(barFont);
+
+        SelectObject(hdc, oldPen);
 
         DeleteObject(titleFont);
         DeleteObject(subFont);
@@ -375,6 +425,7 @@ static void ShowStatusPopup(const wchar_t* text)
     data.status = text;
     data.startTime = GetTickCount();
     data.finalAlpha = (BYTE)(255 * 85 / 100); // 85% opacity
+    data.progress = 0;
 
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
@@ -406,13 +457,21 @@ static void ShowStatusPopup(const wchar_t* text)
 // DLL entry point
 DWORD WINAPI ProtectionThread(LPVOID lpParam); // Declare your ProtectionThread
 
+// Run loading popup on a separate thread so game can initialize concurrently
+static DWORD WINAPI LoadingPopupThread(LPVOID) {
+    ShowStatusPopup(L"Loading...");
+    return 0;
+}
+
 // --- MODIFIED DLLMAIN --- //
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
 
-        ShowStatusPopup(L"Loading...");
+        // Show loading popup without blocking game startup
+        HANDLE hPopup = CreateThread(NULL, 0, LoadingPopupThread, NULL, 0, NULL);
+        if (hPopup) CloseHandle(hPopup);
 
         gClientConfig = LoadClientInfoVirtual();
 
