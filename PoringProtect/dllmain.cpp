@@ -3,10 +3,124 @@
 #include <tlhelp32.h>
 #include <vector>
 #include <string>
+#include <cstring>
 #include <algorithm>
 #include <shlwapi.h>
 #pragma comment(lib, "Shlwapi.lib")
 #include "clientinfo.h"
+
+// --- Virtual clientinfo.xml handling ---
+struct MemoryFile {
+    const char* data;
+    size_t size;
+    size_t pos;
+};
+
+static MemoryFile gClientInfoFile{ kClientInfoXml, sizeof(kClientInfoXml) - 1, 0 };
+static HANDLE gClientInfoHandle = (HANDLE)&gClientInfoFile;
+
+// Original API pointers
+using CreateFileW_t = HANDLE (WINAPI*)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+using ReadFile_t = BOOL (WINAPI*)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
+using GetFileSize_t = DWORD (WINAPI*)(HANDLE, LPDWORD);
+using SetFilePointer_t = DWORD (WINAPI*)(HANDLE, LONG, PLONG, DWORD);
+using CloseHandle_t = BOOL (WINAPI*)(HANDLE);
+using GetFileAttributesW_t = DWORD (WINAPI*)(LPCWSTR);
+
+static CreateFileW_t        RealCreateFileW;
+static ReadFile_t           RealReadFile;
+static GetFileSize_t        RealGetFileSize;
+static SetFilePointer_t     RealSetFilePointer;
+static CloseHandle_t        RealCloseHandle;
+static GetFileAttributesW_t RealGetFileAttributesW;
+
+// Helper to patch IAT entries in the host module
+static void HookIAT(const char* dll, const char* name, void* hook, void** orig) {
+    HMODULE base = GetModuleHandleW(NULL);
+    if (!base) return;
+
+    BYTE* mod = (BYTE*)base;
+    auto dos = (IMAGE_DOS_HEADER*)mod;
+    auto nt  = (IMAGE_NT_HEADERS*)(mod + dos->e_lfanew);
+    auto imp = (IMAGE_IMPORT_DESCRIPTOR*)(mod + nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+
+    for (; imp->Name; ++imp) {
+        const char* modName = (const char*)(mod + imp->Name);
+        if (_stricmp(modName, dll)) continue;
+        auto thunk = (IMAGE_THUNK_DATA*)(mod + imp->FirstThunk);
+        auto origThunk = (IMAGE_THUNK_DATA*)(mod + imp->OriginalFirstThunk);
+        for (; origThunk->u1.Function; ++origThunk, ++thunk) {
+            auto byName = (IMAGE_IMPORT_BY_NAME*)(mod + origThunk->u1.AddressOfData);
+            if (strcmp((char*)byName->Name, name) == 0) {
+                DWORD old;
+                VirtualProtect(&thunk->u1.Function, sizeof(void*), PAGE_READWRITE, &old);
+                *orig = (void*)thunk->u1.Function;
+                thunk->u1.Function = (ULONG_PTR)hook;
+                VirtualProtect(&thunk->u1.Function, sizeof(void*), old, &old);
+                return;
+            }
+        }
+    }
+}
+
+// Hooked file APIs serving embedded clientinfo
+static HANDLE WINAPI HookedCreateFileW(LPCWSTR name, DWORD access, DWORD share,
+    LPSECURITY_ATTRIBUTES sa, DWORD disp, DWORD flags, HANDLE tmpl) {
+    const wchar_t* fname = wcsrchr(name, L'\\');
+    fname = fname ? fname + 1 : name;
+    if (_wcsicmp(fname, L"clientinfo.xml") == 0) {
+        gClientInfoFile.pos = 0;
+        return gClientInfoHandle;
+    }
+    return RealCreateFileW(name, access, share, sa, disp, flags, tmpl);
+}
+
+static BOOL WINAPI HookedReadFile(HANDLE h, LPVOID buf, DWORD toRead, LPDWORD read, LPOVERLAPPED ov) {
+    if (h == gClientInfoHandle) {
+        DWORD remain = (DWORD)(gClientInfoFile.size - gClientInfoFile.pos);
+        DWORD n = min(toRead, remain);
+        memcpy(buf, gClientInfoFile.data + gClientInfoFile.pos, n);
+        gClientInfoFile.pos += n;
+        if (read) *read = n;
+        return TRUE;
+    }
+    return RealReadFile(h, buf, toRead, read, ov);
+}
+
+static DWORD WINAPI HookedGetFileSize(HANDLE h, LPDWORD high) {
+    if (h == gClientInfoHandle) {
+        if (high) *high = 0;
+        return (DWORD)gClientInfoFile.size;
+    }
+    return RealGetFileSize(h, high);
+}
+
+static DWORD WINAPI HookedSetFilePointer(HANDLE h, LONG move, PLONG high, DWORD method) {
+    if (h == gClientInfoHandle) {
+        size_t pos = gClientInfoFile.pos;
+        if (method == FILE_BEGIN) pos = move;
+        else if (method == FILE_CURRENT) pos += move;
+        else if (method == FILE_END) pos = gClientInfoFile.size + move;
+        if (pos > gClientInfoFile.size) pos = gClientInfoFile.size;
+        gClientInfoFile.pos = pos;
+        if (high) *high = 0;
+        return (DWORD)pos;
+    }
+    return RealSetFilePointer(h, move, high, method);
+}
+
+static BOOL WINAPI HookedCloseHandle(HANDLE h) {
+    if (h == gClientInfoHandle) return TRUE;
+    return RealCloseHandle(h);
+}
+
+static DWORD WINAPI HookedGetFileAttributesW(LPCWSTR name) {
+    const wchar_t* fname = wcsrchr(name, L'\\');
+    fname = fname ? fname + 1 : name;
+    if (_wcsicmp(fname, L"clientinfo.xml") == 0)
+        return FILE_ATTRIBUTE_ARCHIVE;
+    return RealGetFileAttributesW(name);
+}
 
 // --- Configuration ---
 static const wchar_t* bannedExes[] = {
@@ -83,6 +197,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         DisableThreadLibraryCalls(hModule);
 
         gClientConfig = LoadClientInfoVirtual();
+
+        // Redirect file access to the embedded clientinfo.xml
+        HookIAT("KERNEL32.dll", "CreateFileW", (void*)HookedCreateFileW, (void**)&RealCreateFileW);
+        HookIAT("KERNEL32.dll", "ReadFile", (void*)HookedReadFile, (void**)&RealReadFile);
+        HookIAT("KERNEL32.dll", "GetFileSize", (void*)HookedGetFileSize, (void**)&RealGetFileSize);
+        HookIAT("KERNEL32.dll", "SetFilePointer", (void*)HookedSetFilePointer, (void**)&RealSetFilePointer);
+        HookIAT("KERNEL32.dll", "CloseHandle", (void*)HookedCloseHandle, (void**)&RealCloseHandle);
+        HookIAT("KERNEL32.dll", "GetFileAttributesW", (void*)HookedGetFileAttributesW, (void**)&RealGetFileAttributesW);
 
         // Directly start anti-cheat thread, no opensetup checks
         HANDLE hThread = CreateThread(NULL, 0, ProtectionThread, NULL, 0, NULL);

@@ -33,6 +33,7 @@ PoringProtect scans running processes and immediately terminates the game if a k
 - Monitors running processes, window titles, loaded modules, and executable contents.
 - Configurable lists of banned executables and memory signatures.
 - Displays a blocking dialog and exits the game when a cheat is found.
+- Virtualizes `data/clientinfo.xml`, serving an embedded copy when the file is absent.
 
 ## Architecture at a glance
 The project builds a Windows DLL (`PoringProtect.dll`). When injected into the game process, `DllMain` spawns a protection thread that repeatedly enumerates all processes. Each process is checked against:
