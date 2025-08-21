@@ -7,10 +7,8 @@
 #include <algorithm>
 #include <shlwapi.h>
 #pragma comment(lib, "Shlwapi.lib")
-#include <commctrl.h>
-#pragma comment(lib, "Comctl32.lib")
-#pragma comment(lib, "Msimg32.lib")
 #include "clientinfo.h"
+#include "popup.h"
 
 // --- Virtual clientinfo.xml handling ---
 struct MemoryFile {
@@ -228,6 +226,7 @@ DWORD WINAPI ShowErrorAndExit(LPVOID lpParam)
     return 0;
 }
 
+#if 0
 struct PopupData {
     std::wstring status;
     DWORD startTime;
@@ -462,15 +461,17 @@ static DWORD WINAPI LoadingPopupThread(LPVOID) {
     ShowStatusPopup(L"Loading...");
     return 0;
 }
+#endif
 
 // --- MODIFIED DLLMAIN --- //
+DWORD WINAPI ProtectionThread(LPVOID lpParam);
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
 
         // Show loading popup without blocking game startup
-        HANDLE hPopup = CreateThread(NULL, 0, LoadingPopupThread, NULL, 0, NULL);
+        HANDLE hPopup = CreateThread(NULL, 0, PopupThread, NULL, 0, NULL);
         if (hPopup) CloseHandle(hPopup);
 
         gClientConfig = LoadClientInfoVirtual();
