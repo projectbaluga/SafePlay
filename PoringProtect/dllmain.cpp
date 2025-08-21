@@ -430,7 +430,9 @@ static void ShowStatusPopup(const wchar_t* text)
     data.finalX = screenW - POPUP_WIDTH - POPUP_MARGIN;
     data.finalY = screenH - POPUP_HEIGHT - POPUP_MARGIN;
 
-    HWND hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+    // Create a click-through, non-activating popup so it doesn't steal focus
+    HWND hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED |
+        WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
         wc.lpszClassName, L"", WS_POPUP,
         data.finalX, data.finalY + POPUP_HEIGHT, POPUP_WIDTH, POPUP_HEIGHT,
         NULL, NULL, wc.hInstance, &data);
