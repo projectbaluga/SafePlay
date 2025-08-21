@@ -174,7 +174,7 @@ static const char* bannedMemPatterns[] = {
 
 struct ClientConfig {
     std::string address;
-    int port;
+    int port = 0;
 };
 
 static ClientConfig LoadClientInfoVirtual() {
