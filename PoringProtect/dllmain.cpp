@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <shlwapi.h>
 #pragma comment(lib, "Shlwapi.lib")
+#include "clientinfo.h"
 
 // --- Configuration ---
 static const wchar_t* bannedExes[] = {
@@ -33,6 +34,28 @@ static const char* bannedMemPatterns[] = {
     "4RTOOLS", "4RTools", "_4RTools"
 };
 
+struct ClientConfig {
+    std::string address;
+    int port;
+};
+
+static ClientConfig LoadClientInfoVirtual() {
+    ClientConfig cfg{};
+    std::string xml = kClientInfoXml;
+    size_t start, end;
+    if ((start = xml.find("<address>")) != std::string::npos &&
+        (end = xml.find("</address>", start)) != std::string::npos) {
+        cfg.address = xml.substr(start + 9, end - (start + 9));
+    }
+    if ((start = xml.find("<port>")) != std::string::npos &&
+        (end = xml.find("</port>", start)) != std::string::npos) {
+        cfg.port = std::stoi(xml.substr(start + 6, end - (start + 6)));
+    }
+    return cfg;
+}
+
+static ClientConfig gClientConfig;
+
 // Function prototypes
 DWORD WINAPI ProtectionThread(LPVOID lpParam);
 DWORD WINAPI ShowErrorAndExit(LPVOID lpParam);
@@ -58,6 +81,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
+
+        gClientConfig = LoadClientInfoVirtual();
 
         // Directly start anti-cheat thread, no opensetup checks
         HANDLE hThread = CreateThread(NULL, 0, ProtectionThread, NULL, 0, NULL);
