@@ -207,9 +207,7 @@ static bool VerifyDataIni() {
     strcat_s(path, "\\Data.ini");
 
     char buf[MAX_PATH];
-    if (GetPrivateProfileStringA("Data", "0", "", buf, sizeof(buf), path) == 0 || _stricmp(buf, "pdata.grf") != 0)
-        return false;
-    if (GetPrivateProfileStringA("Data", "1", "", buf, sizeof(buf), path) == 0 || _stricmp(buf, "data.grf") != 0)
+    if (GetPrivateProfileStringA("Data", "0", "", buf, sizeof(buf), path) == 0 || _stricmp(buf, "data.grf") != 0)
         return false;
     return true;
 }
