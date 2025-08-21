@@ -242,27 +242,42 @@ static void ShowLoadingSplash()
     RegisterClassW(&wc);
 
     HWND hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, wc.lpszClassName,
-        L"RagnaPH Anti-Cheat", WS_POPUPWINDOW | WS_CAPTION,
+        L"RagnaPH Anti-Cheat", WS_POPUP | WS_BORDER | WS_CAPTION,
         CW_USEDEFAULT, CW_USEDEFAULT, 300, 100, NULL, NULL, wc.hInstance, NULL);
+
+    // Remove potential close button
+    LONG style = GetWindowLongW(hwnd, GWL_STYLE);
+    style &= ~WS_SYSMENU;
+    SetWindowLongW(hwnd, GWL_STYLE, style);
+
+    // Center the splash window on screen
+    RECT rc;
+    GetWindowRect(hwnd, &rc);
+    int width  = rc.right - rc.left;
+    int height = rc.bottom - rc.top;
+    int posX = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
+    int posY = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
+    SetWindowPos(hwnd, NULL, posX, posY, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 
     CreateWindowExW(0, L"STATIC", L"RagnaPH Anti-Cheat is loading...",
         WS_CHILD | WS_VISIBLE, 10, 10, 280, 20, hwnd, NULL, wc.hInstance, NULL);
 
     HWND prog = CreateWindowExW(0, PROGRESS_CLASSW, NULL,
-        WS_CHILD | WS_VISIBLE, 10, 40, 280, 20, hwnd, NULL, wc.hInstance, NULL);
-    SendMessageW(prog, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
+        WS_CHILD | WS_VISIBLE | PBS_MARQUEE | PBS_SMOOTH,
+        10, 40, 280, 20, hwnd, NULL, wc.hInstance, NULL);
+    SendMessageW(prog, PBM_SETMARQUEE, TRUE, 30);
 
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
 
     MSG msg;
-    for (int i = 0; i <= 100; ++i) {
-        SendMessageW(prog, PBM_SETPOS, i, 0);
+    DWORD start = GetTickCount();
+    while (GetTickCount() - start < 2000) {
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
-        Sleep(20);
+        Sleep(10);
     }
 
     DestroyWindow(hwnd);
