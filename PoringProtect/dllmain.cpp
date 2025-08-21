@@ -238,6 +238,7 @@ struct PopupData {
     int finalY;
     BYTE finalAlpha;
     int progress;
+    RECT progressRect;
 };
 
 static const int POPUP_WIDTH  = 300;
@@ -258,9 +259,45 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)data);
         return TRUE;
     case WM_CREATE:
+    {
         SetTimer(hwnd, 1, 15, NULL); // entry animation
         SetTimer(hwnd, 2, 50, NULL); // progress update (~20 FPS)
+
+        // Pre-calc progress bar rect so we can invalidate only that area later
+        HDC hdc = GetDC(hwnd);
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+        HFONT titleFont = CreateFontW(-MulDiv(14, dpi, 72), 0, 0, 0, FW_SEMIBOLD,
+            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+        HFONT subFont = CreateFontW(-MulDiv(11, dpi, 72), 0, 0, 0, FW_NORMAL,
+            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+        int iconSize = 32;
+        int circleX = 16;
+        int textX = circleX + iconSize + 16;
+        int textWidth = rc.right - textX - 16;
+        RECT calc{ 0,0,textWidth,0 };
+        SelectObject(hdc, titleFont);
+        DrawTextW(hdc, L"RagnaPH Anti-Cheat", -1, &calc, DT_CALCRECT);
+        int titleH = calc.bottom;
+        SelectObject(hdc, subFont);
+        calc = { 0,0,textWidth,0 };
+        DrawTextW(hdc, data->status.c_str(), -1, &calc, DT_CALCRECT);
+        int subH = calc.bottom;
+        int textHeight = titleH + 8 + subH + 8 + PROGRESS_HEIGHT;
+        int textY = (POPUP_HEIGHT - textHeight) / 2;
+        RECT rcSub{ textX, textY + titleH + 8, textX + textWidth, textY + titleH + 8 + subH };
+        int barWidth = rc.right - PROGRESS_PADDING * 2;
+        int barX = PROGRESS_PADDING;
+        int barY = rcSub.bottom + 8;
+        data->progressRect = { barX, barY, barX + barWidth, barY + PROGRESS_HEIGHT };
+        DeleteObject(titleFont);
+        DeleteObject(subFont);
+        ReleaseDC(hwnd, hdc);
         return 0;
+    }
     case WM_TIMER:
         if (wParam == 1) {
             DWORD now = GetTickCount();
@@ -276,7 +313,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         } else if (wParam == 2) {
             data->progress = min(100, data->progress + PROGRESS_STEP);
-            InvalidateRect(hwnd, NULL, FALSE);
+            InvalidateRect(hwnd, &data->progressRect, FALSE);
             if (data->progress >= 100) {
                 KillTimer(hwnd, 2);
                 data->startTime = GetTickCount();
@@ -305,7 +342,13 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         HDC hdc = BeginPaint(hwnd, &ps);
         RECT rc;
         GetClientRect(hwnd, &rc);
-        Gdiplus::Graphics gfx(hdc);
+        int width = rc.right - rc.left;
+        int height = rc.bottom - rc.top;
+        HDC memDC = CreateCompatibleDC(hdc);
+        HBITMAP memBmp = CreateCompatibleBitmap(hdc, width, height);
+        HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
+
+        Gdiplus::Graphics gfx(memDC);
         gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
         TRIVERTEX vert[2] = {
@@ -313,7 +356,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             { rc.right, rc.bottom, 0x1F * 256, 0x1F * 256, 0x1F * 256, 0xFFFF }
         };
         GRADIENT_RECT gRect = { 0,1 };
-        GradientFill(hdc, vert, 2, &gRect, 1, GRADIENT_FILL_RECT_V);
+        GradientFill(memDC, vert, 2, &gRect, 1, GRADIENT_FILL_RECT_V);
 
         int iconSize = 32;
         int circleX = 16;
@@ -323,10 +366,10 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         (Gdiplus::REAL)iconSize, (Gdiplus::REAL)iconSize);
 
         HICON icon = LoadIconW(NULL, MAKEINTRESOURCEW(32518)); // IDI_SHIELD
-        DrawIconEx(hdc, circleX, circleY, icon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+        DrawIconEx(memDC, circleX, circleY, icon, iconSize, iconSize, 0, NULL, DI_NORMAL);
 
-        SetBkMode(hdc, TRANSPARENT);
-        int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+        SetBkMode(memDC, TRANSPARENT);
+        int dpi = GetDeviceCaps(memDC, LOGPIXELSY);
         HFONT titleFont = CreateFontW(-MulDiv(14, dpi, 72), 0, 0, 0, FW_SEMIBOLD,
             FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
@@ -338,26 +381,26 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         int textWidth = rc.right - textX - 16;
 
         RECT calc{ 0,0,textWidth,0 };
-        SelectObject(hdc, titleFont);
-        DrawTextW(hdc, L"RagnaPH Anti-Cheat", -1, &calc, DT_CALCRECT);
+        SelectObject(memDC, titleFont);
+        DrawTextW(memDC, L"RagnaPH Anti-Cheat", -1, &calc, DT_CALCRECT);
         int titleH = calc.bottom;
-        SelectObject(hdc, subFont);
+        SelectObject(memDC, subFont);
         calc = { 0,0,textWidth,0 };
-        DrawTextW(hdc, data->status.c_str(), -1, &calc, DT_CALCRECT);
+        DrawTextW(memDC, data->status.c_str(), -1, &calc, DT_CALCRECT);
         int subH = calc.bottom;
 
         int textHeight = titleH + 8 + subH + 8 + PROGRESS_HEIGHT;
         int textY = (POPUP_HEIGHT - textHeight) / 2;
 
         RECT rcTitle{ textX, textY, textX + textWidth, textY + titleH };
-        SelectObject(hdc, titleFont);
-        SetTextColor(hdc, RGB(255, 255, 255));
-        DrawTextW(hdc, L"RagnaPH Anti-Cheat", -1, &rcTitle, DT_LEFT | DT_TOP);
+        SelectObject(memDC, titleFont);
+        SetTextColor(memDC, RGB(255, 255, 255));
+        DrawTextW(memDC, L"RagnaPH Anti-Cheat", -1, &rcTitle, DT_LEFT | DT_TOP);
 
         RECT rcSub{ textX, textY + titleH + 8, textX + textWidth, textY + titleH + 8 + subH };
-        SelectObject(hdc, subFont);
-        SetTextColor(hdc, RGB(0xCF, 0xCF, 0xCF));
-        DrawTextW(hdc, data->status.c_str(), -1, &rcSub, DT_LEFT | DT_TOP);
+        SelectObject(memDC, subFont);
+        SetTextColor(memDC, RGB(0xCF, 0xCF, 0xCF));
+        DrawTextW(memDC, data->status.c_str(), -1, &rcSub, DT_LEFT | DT_TOP);
 
         int barWidth = rc.right - PROGRESS_PADDING * 2;
         int barX = PROGRESS_PADDING;
@@ -380,30 +423,44 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
         int fillWidth = barWidth * data->progress / 100;
         if (fillWidth > 0) {
-            gfx.SetClip(&trackPath);
-            Gdiplus::Rect fillRect(barX, barY, fillWidth, PROGRESS_HEIGHT);
+            Gdiplus::GraphicsPath fillPath;
+            Gdiplus::REAL fw = (Gdiplus::REAL)fillWidth;
+            Gdiplus::REAL fr = min(r, fw / 2);
+            fillPath.AddArc(x, y, fr*2, fr*2, 180, 90);
+            fillPath.AddArc(x + fw - fr*2, y, fr*2, fr*2, 270, 90);
+            fillPath.AddArc(x + fw - fr*2, y + h - fr*2, fr*2, fr*2, 0, 90);
+            fillPath.AddArc(x, y + h - fr*2, fr*2, fr*2, 90, 90);
+            fillPath.CloseFigure();
             Gdiplus::LinearGradientBrush pbrush(
-                fillRect,
+                Gdiplus::Point(barX, barY),
+                Gdiplus::Point(barX + fillWidth, barY),
                 Gdiplus::Color(0xFF, 0x4A, 0x90, 0xE2),
-                Gdiplus::Color(0xFF, 0x35, 0x7A, 0xBD),
-                Gdiplus::LinearGradientModeHorizontal);
-            gfx.FillRectangle(&pbrush, fillRect);
-            gfx.ResetClip();
+                Gdiplus::Color(0xFF, 0x35, 0x7A, 0xBD));
+            gfx.FillPath(&pbrush, &fillPath);
         }
 
         HFONT barFont = CreateFontW(-MulDiv(10, dpi, 72), 0, 0, 0, FW_NORMAL,
             FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
             CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-        SelectObject(hdc, barFont);
-        SetTextColor(hdc, RGB(0xCF, 0xCF, 0xCF));
+        SelectObject(memDC, barFont);
+        SetTextColor(memDC, RGB(0xCF, 0xCF, 0xCF));
         std::wstring pct = std::to_wstring(data->progress) + L"%";
         RECT rcPct{ barX, barY, barX + barWidth, barY + PROGRESS_HEIGHT };
-        DrawTextW(hdc, pct.c_str(), -1, &rcPct,
+        DrawTextW(memDC, pct.c_str(), -1, &rcPct,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         DeleteObject(barFont);
 
         DeleteObject(titleFont);
         DeleteObject(subFont);
+
+        // Blit only the updated region to screen
+        BitBlt(hdc, ps.rcPaint.left, ps.rcPaint.top,
+            ps.rcPaint.right - ps.rcPaint.left,
+            ps.rcPaint.bottom - ps.rcPaint.top,
+            memDC, ps.rcPaint.left, ps.rcPaint.top, SRCCOPY);
+        SelectObject(memDC, oldBmp);
+        DeleteObject(memBmp);
+        DeleteDC(memDC);
         EndPaint(hwnd, &ps);
         return 0;
     }
