@@ -76,8 +76,8 @@ static LRESULT CALLBACK LoaderProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         RECT rc; GetClientRect(hwnd, &rc);
         SolidBrush bg(Color(0xFF, 0x2B, 0x2B, 0x2B));
-        Rect r(rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top);
-        g.FillRectangle(&bg, r);
+        Rect clientRect(rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top);
+        g.FillRectangle(&bg, clientRect);
 
         FontFamily ff(L"Segoe UI");
         Font title(&ff, 14, FontStyleBold, UnitPoint);
@@ -185,8 +185,8 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         Graphics g(hdc); g.SetSmoothingMode(SmoothingModeAntiAlias);
         RECT rc; GetClientRect(hwnd, &rc);
         SolidBrush bg(Color(0xFF, 0x2B, 0x2B, 0x2B));
-        Rect r(rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top);
-        g.FillRectangle(&bg, r);
+        Rect clientRect(rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top);
+        g.FillRectangle(&bg, clientRect);
 
         FontFamily ff(L"Segoe UI");
         Font title(&ff, 14, FontStyleBold, UnitPoint);
@@ -201,11 +201,11 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         g.FillPath(&btnBrush, &path);
 
         Font btnFont(&ff, 12, FontStyleRegular, UnitPoint);
-        RectF r((REAL)data->btnRect.left, (REAL)data->btnRect.top,
+        RectF textRect((REAL)data->btnRect.left, (REAL)data->btnRect.top,
             (REAL)(data->btnRect.right - data->btnRect.left),
             (REAL)(data->btnRect.bottom - data->btnRect.top));
         StringFormat sf; sf.SetAlignment(StringAlignmentCenter); sf.SetLineAlignment(StringAlignmentCenter);
-        g.DrawString(L"Enable Auto", -1, &btnFont, r, &sf, &white);
+        g.DrawString(L"Enable Auto", -1, &btnFont, textRect, &sf, &white);
         EndPaint(hwnd, &ps);
         return 0; }
     case WM_DESTROY:
