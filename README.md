@@ -1,11 +1,4 @@
 # PoringProtect
-[![License](https://img.shields.io/github/license/projectbaluga/PoringProtect?style=flat)](https://github.com/projectbaluga/PoringProtect/blob/main/LICENSE)
-[![Stars](https://img.shields.io/github/stars/projectbaluga/PoringProtect?style=flat)](https://github.com/projectbaluga/PoringProtect/stargazers)
-[![Issues](https://img.shields.io/github/issues/projectbaluga/PoringProtect?style=flat)](https://github.com/projectbaluga/PoringProtect/issues)
-[![PRs](https://img.shields.io/github/issues-pr/projectbaluga/PoringProtect?style=flat)](https://github.com/projectbaluga/PoringProtect/pulls)
-[![Last Commit](https://img.shields.io/github/last-commit/projectbaluga/PoringProtect?style=flat)](https://github.com/projectbaluga/PoringProtect/commits/main)
-[![Top Language](https://img.shields.io/github/languages/top/projectbaluga/PoringProtect?style=flat)](https://github.com/projectbaluga/PoringProtect)
-
 Lightweight anti-cheat DLL for Ragnarok Online clients.
 
 ## Table of Contents
