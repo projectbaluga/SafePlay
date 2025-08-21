@@ -30,10 +30,12 @@ PoringProtect scans running processes and immediately terminates the game if a k
 **Target users:** RagnaPH server maintainers and Ragnarok Online mod developers.
 
 **Features**
-- Monitors running processes, window titles, loaded modules, and executable contents.
-- Configurable lists of banned executables and memory signatures.
-- Displays a blocking dialog and exits the game when a cheat is found.
-- Virtualizes `data/clientinfo.xml`, serving an embedded copy when the file is absent.
+- Multi-vector detection scans process names, window titles, loaded modules, and signature patterns inside executables.
+- Configurable lists of banned executables, window titles, modules, and memory signatures.
+- Displays a blocking dialog and terminates the game when a cheat is found.
+- Serves an embedded `clientinfo.xml` via API hooks when the file is missing.
+- Validates `Data.ini` to ensure required GRF archives are present.
+- Shows a non-blocking loading popup with animated progress during startup.
 
 ## Architecture at a glance
 The project builds a Windows DLL (`PoringProtect.dll`). When injected into the game process, `DllMain` spawns a protection thread that repeatedly enumerates all processes. Each process is checked against:
@@ -177,7 +179,7 @@ No code of conduct is defined—please act professionally and respectfully.
 
 ## License
 **Unlicensed** – no `LICENSE` file is present. All rights reserved by the original author(s).  
-*Last updated: 20 Aug 2025 (UTC+8).* 
+*Last updated: 21 Aug 2025 (UTC+8).*
 
 ## Acknowledgments / Credits
 - Project by the RagnaPH community and contributors.
