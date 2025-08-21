@@ -21,18 +21,22 @@ static HANDLE gClientInfoHandle = (HANDLE)&gClientInfoFile;
 
 // Original API pointers
 using CreateFileW_t = HANDLE (WINAPI*)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+using CreateFileA_t = HANDLE (WINAPI*)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
 using ReadFile_t = BOOL (WINAPI*)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
 using GetFileSize_t = DWORD (WINAPI*)(HANDLE, LPDWORD);
 using SetFilePointer_t = DWORD (WINAPI*)(HANDLE, LONG, PLONG, DWORD);
 using CloseHandle_t = BOOL (WINAPI*)(HANDLE);
 using GetFileAttributesW_t = DWORD (WINAPI*)(LPCWSTR);
+using GetFileAttributesA_t = DWORD (WINAPI*)(LPCSTR);
 
 static CreateFileW_t        RealCreateFileW;
+static CreateFileA_t        RealCreateFileA;
 static ReadFile_t           RealReadFile;
 static GetFileSize_t        RealGetFileSize;
 static SetFilePointer_t     RealSetFilePointer;
 static CloseHandle_t        RealCloseHandle;
 static GetFileAttributesW_t RealGetFileAttributesW;
+static GetFileAttributesA_t RealGetFileAttributesA;
 
 // Helper to patch IAT entries in the host module
 static void HookIAT(const char* dll, const char* name, void* hook, void** orig) {
@@ -73,6 +77,17 @@ static HANDLE WINAPI HookedCreateFileW(LPCWSTR name, DWORD access, DWORD share,
         return gClientInfoHandle;
     }
     return RealCreateFileW(name, access, share, sa, disp, flags, tmpl);
+}
+
+static HANDLE WINAPI HookedCreateFileA(LPCSTR name, DWORD access, DWORD share,
+    LPSECURITY_ATTRIBUTES sa, DWORD disp, DWORD flags, HANDLE tmpl) {
+    const char* fname = strrchr(name, '\\');
+    fname = fname ? fname + 1 : name;
+    if (_stricmp(fname, "clientinfo.xml") == 0) {
+        gClientInfoFile.pos = 0;
+        return gClientInfoHandle;
+    }
+    return RealCreateFileA(name, access, share, sa, disp, flags, tmpl);
 }
 
 static BOOL WINAPI HookedReadFile(HANDLE h, LPVOID buf, DWORD toRead, LPDWORD read, LPOVERLAPPED ov) {
@@ -120,6 +135,14 @@ static DWORD WINAPI HookedGetFileAttributesW(LPCWSTR name) {
     if (_wcsicmp(fname, L"clientinfo.xml") == 0)
         return FILE_ATTRIBUTE_ARCHIVE;
     return RealGetFileAttributesW(name);
+}
+
+static DWORD WINAPI HookedGetFileAttributesA(LPCSTR name) {
+    const char* fname = strrchr(name, '\\');
+    fname = fname ? fname + 1 : name;
+    if (_stricmp(fname, "clientinfo.xml") == 0)
+        return FILE_ATTRIBUTE_ARCHIVE;
+    return RealGetFileAttributesA(name);
 }
 
 // --- Configuration ---
@@ -200,11 +223,13 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 
         // Redirect file access to the embedded clientinfo.xml
         HookIAT("KERNEL32.dll", "CreateFileW", (void*)HookedCreateFileW, (void**)&RealCreateFileW);
+        HookIAT("KERNEL32.dll", "CreateFileA", (void*)HookedCreateFileA, (void**)&RealCreateFileA);
         HookIAT("KERNEL32.dll", "ReadFile", (void*)HookedReadFile, (void**)&RealReadFile);
         HookIAT("KERNEL32.dll", "GetFileSize", (void*)HookedGetFileSize, (void**)&RealGetFileSize);
         HookIAT("KERNEL32.dll", "SetFilePointer", (void*)HookedSetFilePointer, (void**)&RealSetFilePointer);
         HookIAT("KERNEL32.dll", "CloseHandle", (void*)HookedCloseHandle, (void**)&RealCloseHandle);
         HookIAT("KERNEL32.dll", "GetFileAttributesW", (void*)HookedGetFileAttributesW, (void**)&RealGetFileAttributesW);
+        HookIAT("KERNEL32.dll", "GetFileAttributesA", (void*)HookedGetFileAttributesA, (void**)&RealGetFileAttributesA);
 
         // Directly start anti-cheat thread, no opensetup checks
         HANDLE hThread = CreateThread(NULL, 0, ProtectionThread, NULL, 0, NULL);
