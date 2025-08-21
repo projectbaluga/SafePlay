@@ -9,6 +9,7 @@
 #pragma comment(lib, "Shlwapi.lib")
 #include <commctrl.h>
 #pragma comment(lib, "Comctl32.lib")
+#pragma comment(lib, "Msimg32.lib")
 #include "clientinfo.h"
 
 // --- Virtual clientinfo.xml handling ---
@@ -229,58 +230,176 @@ DWORD WINAPI ShowErrorAndExit(LPVOID lpParam)
     return 0;
 }
 
-// Display a brief splash window with a progress bar during startup.
-static void ShowLoadingSplash()
-{
-    INITCOMMONCONTROLSEX icc{ sizeof(icc), ICC_PROGRESS_CLASS };
-    InitCommonControlsEx(&icc);
+struct PopupData {
+    std::wstring status;
+    DWORD startTime;
+    int finalX;
+    int finalY;
+    BYTE finalAlpha;
+};
 
+static const int POPUP_WIDTH  = 300;
+static const int POPUP_HEIGHT = 120;
+static const int POPUP_MARGIN = 24;
+static const int POPUP_RADIUS = 16;
+
+static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    PopupData* data = (PopupData*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+    switch (msg) {
+    case WM_NCCREATE:
+        data = (PopupData*)((CREATESTRUCTW*)lParam)->lpCreateParams;
+        SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)data);
+        return TRUE;
+    case WM_CREATE:
+        SetTimer(hwnd, 1, 15, NULL); // entry animation
+        return 0;
+    case WM_TIMER:
+        if (wParam == 1) {
+            DWORD now = GetTickCount();
+            float t = (now - data->startTime) / 250.0f;
+            if (t >= 1.0f) {
+                t = 1.0f;
+                KillTimer(hwnd, 1);
+                SetTimer(hwnd, 2, 5000, NULL); // auto-close
+            }
+            int y = data->finalY + (int)((1.0f - t) * POPUP_HEIGHT);
+            BYTE a = (BYTE)(data->finalAlpha * t);
+            SetLayeredWindowAttributes(hwnd, 0, a, LWA_ALPHA);
+            SetWindowPos(hwnd, NULL, data->finalX, y, 0, 0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        } else if (wParam == 2) {
+            KillTimer(hwnd, 2);
+            data->startTime = GetTickCount();
+            SetTimer(hwnd, 3, 15, NULL); // fade-out
+        } else if (wParam == 3) {
+            DWORD now = GetTickCount();
+            float t = (now - data->startTime) / 150.0f;
+            if (t >= 1.0f) {
+                DestroyWindow(hwnd);
+            } else {
+                BYTE a = (BYTE)(data->finalAlpha * (1.0f - t));
+                SetLayeredWindowAttributes(hwnd, 0, a, LWA_ALPHA);
+            }
+        }
+        return 0;
+    case WM_LBUTTONUP:
+        KillTimer(hwnd, 1);
+        KillTimer(hwnd, 2);
+        data->startTime = GetTickCount();
+        SetTimer(hwnd, 3, 15, NULL);
+        return 0;
+    case WM_PAINT:
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+
+        TRIVERTEX vert[2] = {
+            { rc.left, rc.top,   0x2B * 256, 0x2B * 256, 0x2B * 256, 0xFFFF },
+            { rc.right, rc.bottom, 0x1F * 256, 0x1F * 256, 0x1F * 256, 0xFFFF }
+        };
+        GRADIENT_RECT gRect = { 0,1 };
+        GradientFill(hdc, vert, 2, &gRect, 1, GRADIENT_FILL_RECT_V);
+
+        int iconSize = 32;
+        int circleX = 16;
+        int circleY = (POPUP_HEIGHT - iconSize) / 2;
+        HBRUSH badge = CreateSolidBrush(RGB(0x3A, 0x3A, 0x3A));
+        HGDIOBJ old = SelectObject(hdc, badge);
+        Ellipse(hdc, circleX, circleY, circleX + iconSize, circleY + iconSize);
+        SelectObject(hdc, old);
+        DeleteObject(badge);
+
+        HICON icon = LoadIconW(NULL, MAKEINTRESOURCEW(32518)); // IDI_SHIELD
+        DrawIconEx(hdc, circleX, circleY, icon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+
+        SetBkMode(hdc, TRANSPARENT);
+        int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+        HFONT titleFont = CreateFontW(-MulDiv(14, dpi, 72), 0, 0, 0, FW_SEMIBOLD,
+            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+        HFONT subFont = CreateFontW(-MulDiv(11, dpi, 72), 0, 0, 0, FW_NORMAL,
+            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+
+        int textX = circleX + iconSize + 16;
+        int textWidth = rc.right - textX - 16;
+
+        RECT calc{ 0,0,textWidth,0 };
+        SelectObject(hdc, titleFont);
+        DrawTextW(hdc, L"RagnaPH Anti-Cheat", -1, &calc, DT_CALCRECT);
+        int titleH = calc.bottom;
+        SelectObject(hdc, subFont);
+        calc = { 0,0,textWidth,0 };
+        DrawTextW(hdc, data->status.c_str(), -1, &calc, DT_CALCRECT);
+        int subH = calc.bottom;
+
+        int textHeight = titleH + 8 + subH;
+        int textY = (POPUP_HEIGHT - textHeight) / 2;
+
+        RECT rcTitle{ textX, textY, textX + textWidth, textY + titleH };
+        SelectObject(hdc, titleFont);
+        SetTextColor(hdc, RGB(255, 255, 255));
+        DrawTextW(hdc, L"RagnaPH Anti-Cheat", -1, &rcTitle, DT_LEFT | DT_TOP);
+
+        RECT rcSub{ textX, textY + titleH + 8, textX + textWidth, textY + titleH + 8 + subH };
+        SelectObject(hdc, subFont);
+        SetTextColor(hdc, RGB(0xCF, 0xCF, 0xCF));
+        DrawTextW(hdc, data->status.c_str(), -1, &rcSub, DT_LEFT | DT_TOP);
+
+        DeleteObject(titleFont);
+        DeleteObject(subFont);
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+// Show a temporary popup notification in the bottom-right corner
+static void ShowStatusPopup(const wchar_t* text)
+{
     WNDCLASSW wc{ 0 };
-    wc.lpfnWndProc = DefWindowProcW;
+    wc.lpfnWndProc = PopupWndProc;
     wc.hInstance = GetModuleHandleW(NULL);
-    wc.lpszClassName = L"RagnaSplashWnd";
+    wc.lpszClassName = L"RagnaPopupWnd";
+    wc.style = CS_DROPSHADOW;
     RegisterClassW(&wc);
 
-    HWND hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, wc.lpszClassName,
-        L"RagnaPH Anti-Cheat", WS_POPUP | WS_BORDER | WS_CAPTION,
-        CW_USEDEFAULT, CW_USEDEFAULT, 300, 100, NULL, NULL, wc.hInstance, NULL);
+    PopupData data{};
+    data.status = text;
+    data.startTime = GetTickCount();
+    data.finalAlpha = (BYTE)(255 * 85 / 100); // 85% opacity
 
-    // Remove potential close button
-    LONG style = GetWindowLongW(hwnd, GWL_STYLE);
-    style &= ~WS_SYSMENU;
-    SetWindowLongW(hwnd, GWL_STYLE, style);
+    int screenW = GetSystemMetrics(SM_CXSCREEN);
+    int screenH = GetSystemMetrics(SM_CYSCREEN);
+    data.finalX = screenW - POPUP_WIDTH - POPUP_MARGIN;
+    data.finalY = screenH - POPUP_HEIGHT - POPUP_MARGIN;
 
-    // Center the splash window on screen
-    RECT rc;
-    GetWindowRect(hwnd, &rc);
-    int width  = rc.right - rc.left;
-    int height = rc.bottom - rc.top;
-    int posX = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
-    int posY = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
-    SetWindowPos(hwnd, NULL, posX, posY, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+    HWND hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+        wc.lpszClassName, L"", WS_POPUP,
+        data.finalX, data.finalY + POPUP_HEIGHT, POPUP_WIDTH, POPUP_HEIGHT,
+        NULL, NULL, wc.hInstance, &data);
+    if (!hwnd) return;
 
-    CreateWindowExW(0, L"STATIC", L"RagnaPH Anti-Cheat is loading...",
-        WS_CHILD | WS_VISIBLE, 10, 10, 280, 20, hwnd, NULL, wc.hInstance, NULL);
+    HRGN rgn = CreateRoundRectRgn(0, 0, POPUP_WIDTH, POPUP_HEIGHT,
+        POPUP_RADIUS * 2, POPUP_RADIUS * 2);
+    SetWindowRgn(hwnd, rgn, FALSE);
 
-    HWND prog = CreateWindowExW(0, PROGRESS_CLASSW, NULL,
-        WS_CHILD | WS_VISIBLE | PBS_MARQUEE | PBS_SMOOTH,
-        10, 40, 280, 20, hwnd, NULL, wc.hInstance, NULL);
-    SendMessageW(prog, PBM_SETMARQUEE, TRUE, 30);
-
-    ShowWindow(hwnd, SW_SHOW);
+    SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
+    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     UpdateWindow(hwnd);
 
     MSG msg;
-    DWORD start = GetTickCount();
-    while (GetTickCount() - start < 2000) {
-        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-        Sleep(10);
+    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
     }
-
-    DestroyWindow(hwnd);
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
 }
 
@@ -293,7 +412,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
 
-        ShowLoadingSplash();
+        ShowStatusPopup(L"Loading...");
 
         gClientConfig = LoadClientInfoVirtual();
 
