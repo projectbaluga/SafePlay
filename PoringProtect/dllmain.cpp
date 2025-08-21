@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <shlwapi.h>
 #pragma comment(lib, "Shlwapi.lib")
+#include <commctrl.h>
+#pragma comment(lib, "Comctl32.lib")
 #include "clientinfo.h"
 
 // --- Virtual clientinfo.xml handling ---
@@ -227,6 +229,46 @@ DWORD WINAPI ShowErrorAndExit(LPVOID lpParam)
     return 0;
 }
 
+// Display a brief splash window with a progress bar during startup.
+static void ShowLoadingSplash()
+{
+    INITCOMMONCONTROLSEX icc{ sizeof(icc), ICC_PROGRESS_CLASS };
+    InitCommonControlsEx(&icc);
+
+    WNDCLASSW wc{ 0 };
+    wc.lpfnWndProc = DefWindowProcW;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = L"RagnaSplashWnd";
+    RegisterClassW(&wc);
+
+    HWND hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, wc.lpszClassName,
+        L"RagnaPH Anti-Cheat", WS_POPUPWINDOW | WS_CAPTION,
+        CW_USEDEFAULT, CW_USEDEFAULT, 300, 100, NULL, NULL, wc.hInstance, NULL);
+
+    CreateWindowExW(0, L"STATIC", L"RagnaPH Anti-Cheat is loading...",
+        WS_CHILD | WS_VISIBLE, 10, 10, 280, 20, hwnd, NULL, wc.hInstance, NULL);
+
+    HWND prog = CreateWindowExW(0, PROGRESS_CLASSW, NULL,
+        WS_CHILD | WS_VISIBLE, 10, 40, 280, 20, hwnd, NULL, wc.hInstance, NULL);
+    SendMessageW(prog, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
+
+    ShowWindow(hwnd, SW_SHOW);
+    UpdateWindow(hwnd);
+
+    MSG msg;
+    for (int i = 0; i <= 100; ++i) {
+        SendMessageW(prog, PBM_SETPOS, i, 0);
+        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        Sleep(20);
+    }
+
+    DestroyWindow(hwnd);
+    UnregisterClassW(wc.lpszClassName, wc.hInstance);
+}
+
 // DLL entry point
 DWORD WINAPI ProtectionThread(LPVOID lpParam); // Declare your ProtectionThread
 
@@ -235,6 +277,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
+
+        ShowLoadingSplash();
 
         gClientConfig = LoadClientInfoVirtual();
 
