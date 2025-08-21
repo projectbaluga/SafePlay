@@ -6,6 +6,9 @@
 #pragma comment(lib, "Gdiplus.lib")
 using namespace Gdiplus;
 
+// Global toggle for automation state
+bool g_autoEnabled = false;
+
 // Helper to build rounded rectangles with GDI+
 static void AddRoundRect(GraphicsPath& path, const Rect& r, int radius) {
     int d = radius * 2;
@@ -16,9 +19,22 @@ static void AddRoundRect(GraphicsPath& path, const Rect& r, int radius) {
     path.CloseFigure();
 }
 
-// Placeholder to be hooked into the game later
+// Toggle automation and notify game client
 void TriggerAuto() {
-    // TODO: implement integration with Ragnarok client
+    // Flip state
+    g_autoEnabled = !g_autoEnabled;
+
+    // Attempt to notify Ragnarok client via custom message
+    HWND gameWnd = FindWindowW(L"Ragnarok", nullptr);
+    if (gameWnd) {
+        PostMessageW(gameWnd, WM_APP + 1, g_autoEnabled, 0);
+    }
+
+    // Provide feedback to the user
+    MessageBoxW(nullptr,
+                g_autoEnabled ? L"Auto enabled" : L"Auto disabled",
+                L"RagnaPH",
+                MB_OK | MB_TOPMOST);
 }
 
 // ---------------- Loader Window ----------------
@@ -178,7 +194,10 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         return 0; }
     case WM_LBUTTONUP: {
         POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-        if (PtInRect(&data->btnRect, pt)) TriggerAuto();
+        if (PtInRect(&data->btnRect, pt)) {
+            TriggerAuto();
+            InvalidateRect(hwnd, &data->btnRect, FALSE);
+        }
         return 0; }
     case WM_PAINT: {
         PAINTSTRUCT ps; HDC hdc = BeginPaint(hwnd, &ps);
@@ -205,7 +224,8 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             (REAL)(data->btnRect.right - data->btnRect.left),
             (REAL)(data->btnRect.bottom - data->btnRect.top));
         StringFormat sf; sf.SetAlignment(StringAlignmentCenter); sf.SetLineAlignment(StringAlignmentCenter);
-        g.DrawString(L"Enable Auto", -1, &btnFont, textRect, &sf, &white);
+        g.DrawString(g_autoEnabled ? L"Disable Auto" : L"Enable Auto",
+                     -1, &btnFont, textRect, &sf, &white);
         EndPaint(hwnd, &ps);
         return 0; }
     case WM_DESTROY:
