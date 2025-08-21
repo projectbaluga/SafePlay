@@ -5,6 +5,7 @@
 #include <string>
 #include <cstring>
 #include <algorithm>
+#include <fstream>
 #include <shlwapi.h>
 #pragma comment(lib, "Shlwapi.lib")
 #include <commctrl.h>
@@ -148,31 +149,41 @@ static DWORD WINAPI HookedGetFileAttributesA(LPCSTR name) {
     return RealGetFileAttributesA(name);
 }
 
-// --- Configuration ---
-static const wchar_t* bannedExes[] = {
-    L"cheatengine.exe",    L"openkore.exe",     L"ollydbg.exe",    L"x64dbg.exe",
-    L"artmoney.exe",       L"winhex.exe",       L"mhs.exe",        L"proz.exe",
-    L"ragnarokcheat.exe",  L"botter.exe",       L"trainer.exe",    L"debugger.exe",
-    L"packeteditor.exe",   L"godmode.exe",      L"speedhack.exe",  L"4rtools.exe",
-    L"ragnarokbot.exe",    L"ragnabot.exe",     L"probot.exe",     L"robot.exe",
-    L"gamehacker.exe",     L"fiddle.exe",       L"rocheat.exe",     L"packetproxy.exe",
-    L"xragnarok.exe",      L"irocheat.exe",     L"rohelper.exe",    L"ragnarokhelper.exe",
-    L"speedbot.exe",       L"multihack.exe",    L"gmcheat.exe",    L"gameguardian.exe",
-    L"zcheat.exe",         L"fakeclient.exe",   L"ragnarokcheatbot.exe"
-};
+// --- Configuration loaded from data files ---
+static std::vector<std::wstring> bannedExes;
+static std::vector<std::wstring> bannedWindowTitles;
+static std::vector<std::wstring> bannedModules;
+static std::vector<std::string>  bannedMemPatterns;
 
-static const wchar_t* bannedWindowTitles[] = {
-    L"Cheat Engine", L"ArtMoney", L"Game Hacker", L"Memory Viewer"
-};
+static void LoadList(const wchar_t* file, std::vector<std::wstring>& out)
+{
+    std::wstring path = L"data/";
+    path += file;
+    std::wifstream in(path);
+    std::wstring line;
+    while (std::getline(in, line)) {
+        if (!line.empty()) out.push_back(line);
+    }
+}
 
-static const wchar_t* bannedModules[] = {
-    L"cheatengine-i386.dll", L"cheatengine-x64_86.dll",
-    L"winhex.dll",           L"packeteditor.dll"
-};
+static void LoadListA(const wchar_t* file, std::vector<std::string>& out)
+{
+    std::wstring path = L"data/";
+    path += file;
+    std::ifstream in(path);
+    std::string line;
+    while (std::getline(in, line)) {
+        if (!line.empty()) out.push_back(line);
+    }
+}
 
-static const char* bannedMemPatterns[] = {
-    "4RTOOLS", "4RTools", "_4RTools"
-};
+static void LoadBannedLists()
+{
+    LoadList(L"banned_exes.txt", bannedExes);
+    LoadList(L"banned_window_titles.txt", bannedWindowTitles);
+    LoadList(L"banned_modules.txt", bannedModules);
+    LoadListA(L"banned_mem_patterns.txt", bannedMemPatterns);
+}
 
 struct ClientConfig {
     std::string address;
@@ -480,6 +491,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
             return FALSE;
         }
 
+        LoadBannedLists();
+
         // Redirect file access to the embedded clientinfo.xml
         HookIAT("KERNEL32.dll", "CreateFileW", (void*)HookedCreateFileW, (void**)&RealCreateFileW);
         HookIAT("KERNEL32.dll", "CreateFileA", (void*)HookedCreateFileA, (void**)&RealCreateFileA);
@@ -547,9 +560,9 @@ const wchar_t* GetDetectedCheatTool(DWORD pid)
                 if (view) {
                     size_t fileSize = GetFileSize(hFile, NULL);
                     const char* data = (const char*)view;
-                    for (auto pat : bannedMemPatterns) {
+                    for (const auto& pat : bannedMemPatterns) {
                         if (fileSize && std::search(data, data + fileSize,
-                            pat, pat + strlen(pat))
+                            pat.c_str(), pat.c_str() + pat.size())
                             != data + fileSize) {
                             UnmapViewOfFile(view);
                             CloseHandle(hMap);
@@ -574,10 +587,10 @@ const wchar_t* GetDetectedCheatTool(DWORD pid)
         wchar_t exeName[MAX_PATH]; DWORD exeLen = MAX_PATH;
         if (QueryFullProcessImageNameW(hProc, 0, exeName, &exeLen)) {
             const wchar_t* name = wcsrchr(exeName, L'\\') ? wcsrchr(exeName, L'\\') + 1 : exeName;
-            for (auto bad : bannedExes) {
-                if (_wcsicmp(name, bad) == 0 || wcsstr(name, bad)) {
+            for (const auto& bad : bannedExes) {
+                if (_wcsicmp(name, bad.c_str()) == 0 || wcsstr(name, bad.c_str())) {
                     CloseHandle(hProc);
-                    return bad;
+                    return bad.c_str();
                 }
             }
         }
@@ -593,9 +606,9 @@ const wchar_t* GetDetectedCheatTool(DWORD pid)
         if (winPid == p->pid) {
             wchar_t title[256] = { 0 };
             GetWindowTextW(hwnd, title, _countof(title));
-            for (auto bad : bannedWindowTitles) {
-                if (wcsstr(title, bad)) {
-                    p->found = bad;
+            for (const auto& bad : bannedWindowTitles) {
+                if (wcsstr(title, bad.c_str())) {
+                    p->found = bad.c_str();
                     return FALSE;
                 }
             }
@@ -610,10 +623,10 @@ const wchar_t* GetDetectedCheatTool(DWORD pid)
         MODULEENTRY32W me; me.dwSize = sizeof(me);
         if (Module32FirstW(modSnap, &me)) {
             do {
-                for (auto bad : bannedModules) {
-                    if (_wcsicmp(me.szModule, bad) == 0 || wcsstr(me.szModule, bad)) {
+                for (const auto& bad : bannedModules) {
+                    if (_wcsicmp(me.szModule, bad.c_str()) == 0 || wcsstr(me.szModule, bad.c_str())) {
                         CloseHandle(modSnap);
-                        return bad;
+                        return bad.c_str();
                     }
                 }
             } while (Module32NextW(modSnap, &me));

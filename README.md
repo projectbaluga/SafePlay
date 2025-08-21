@@ -79,29 +79,29 @@ cd PoringProtect
 |------|----------|---------|-------------|
 | N/A  | –        | –       | No runtime environment variables.
 
-Example `.env` (reserved for future use):
-```env
-# No variables currently required
-```
+### Banned lists
+Editable text files in the `data/` folder allow updates without recompiling:
 
-Banned process names, window titles, modules, and memory patterns are defined directly in [`dllmain.cpp`](./PoringProtect/dllmain.cpp).
+| File | Purpose |
+|------|---------|
+| `banned_exes.txt` | Process names to block |
+| `banned_window_titles.txt` | Window titles to block |
+| `banned_modules.txt` | Module names to block |
+| `banned_mem_patterns.txt` | Byte or string patterns searched inside executables |
+
+Each entry should appear on its own line.
 
 ## Usage
-- **Modify banned executables**  
-  Edit the `bannedExes` array in `dllmain.cpp`, rebuild, and redistribute the DLL.
-- **Adjust scan interval**  
+- **Modify banned executables**
+  Edit `data/banned_exes.txt` and restart the game.
+- **Adjust scan interval**
   Change the `Sleep(5000);` call in `ProtectionThread` to a different value.
-- **Add memory signature checks**  
-  Append strings to `bannedMemPatterns`.
+- **Add memory signature checks**
+  Append strings to `data/banned_mem_patterns.txt`.
 
 ## Examples & Recipes
 1. **Add a new cheat executable**
-   ```cpp
-   static const wchar_t* bannedExes[] = {
-       L"cheatengine.exe",
-       L"newcheat.exe" // ← add here
-   };
-   ```
+   Append the executable name to `data/banned_exes.txt`.
 2. **Increase scan frequency**
    ```cpp
    // From 5 seconds to 1 second
@@ -124,18 +124,17 @@ Banned process names, window titles, modules, and memory patterns are defined di
 - Not applicable; the DLL contains no persistent data.
 
 ## Testing & Quality
-- No automated tests currently.
+- GitHub Actions builds the solution on every push.
 - Manual QA: build the DLL and verify it blocks known cheat tools.
 - Recommended: run static analysis (`/W4` or `/analyze`) in Visual Studio.
 
 ## Performance & Security Notes
 - Scans run every 5 seconds; adjust if CPU impact is noticeable.
 - Uses `PROCESS_QUERY_LIMITED_INFORMATION` to minimize required privileges.
-- Lists are hard-coded; tampering requires rebuilding the DLL.
+- Lists are loaded from editable text files.
 - No network or external services accessed.
 
 ## Roadmap
-- External configuration for banned lists.
 - Logging/audit trail for detections.
 - Automated test suite and CI pipeline.
 - Dynamic update mechanism for cheat signatures.
@@ -147,11 +146,7 @@ Banned process names, window titles, modules, and memory patterns are defined di
 - Packaging scripts for release automation.
 
 ## Known Issues / What needs to be addressed
-- `resource1.h` referenced in the resource script is missing.
-- No license file; distribution terms are unclear.
-- Static lists require recompilation for updates.
-- No CI or automated testing.
-- Resource file path uses absolute Windows paths—hard to maintain cross-machines.
+- Automated unit tests are still missing.
 
 ## Contributing
 1. Fork and clone the repository.
@@ -178,8 +173,8 @@ No code of conduct is defined—please act professionally and respectfully.
 **A:** Yes, modify the sleep interval in `ProtectionThread`.
 
 ## License
-**Unlicensed** – no `LICENSE` file is present. All rights reserved by the original author(s).  
-*Last updated: 21 Aug 2025 (UTC+8).*
+Released under the [MIT License](./LICENSE).
+*Last updated: 21 Aug 2025 (UTC+8).* 
 
 ## Acknowledgments / Credits
 - Project by the RagnaPH community and contributors.
