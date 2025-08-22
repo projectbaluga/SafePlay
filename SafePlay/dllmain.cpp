@@ -451,25 +451,24 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
         gfx.DrawPath(&outlinePen, &trackPath);
 
-        SetBkMode(memDC, TRANSPARENT);
-        int dpi = GetDeviceCaps(memDC, LOGPIXELSY);
-        HFONT barFont = CreateFontW(-MulDiv(10, dpi, 72), 0, 0, 0, FW_SEMIBOLD,
-            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-            CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-        HFONT oldFont = (HFONT)SelectObject(memDC, barFont);
+        // Use GDI+ for crisp text rendering
         std::wstring pct = std::to_wstring(data->progress) + L"%";
+        gfx.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
+        Gdiplus::FontFamily fontFamily(L"Segoe UI");
+        Gdiplus::Font font(&fontFamily, 10.0f, Gdiplus::FontStyleBold, Gdiplus::UnitPoint);
+        Gdiplus::StringFormat format;
+        format.SetAlignment(Gdiplus::StringAlignmentCenter);
+        format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        Gdiplus::RectF textRect((Gdiplus::REAL)barX, (Gdiplus::REAL)barY,
+            (Gdiplus::REAL)barWidth, (Gdiplus::REAL)barHeight);
         // subtle text shadow for contrast
-        SetTextColor(memDC, RGB(0, 0, 0));
-        RECT rcPctShadow{ barX, barY + 1, barX + barWidth, barY + barHeight + 1 };
-        DrawTextW(memDC, pct.c_str(), -1, &rcPctShadow,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        Gdiplus::RectF textRectShadow((Gdiplus::REAL)barX, (Gdiplus::REAL)barY + 1,
+            (Gdiplus::REAL)barWidth, (Gdiplus::REAL)barHeight);
+        Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(255, 0, 0, 0));
+        gfx.DrawString(pct.c_str(), -1, &font, textRectShadow, &format, &shadowBrush);
         // main text
-        SetTextColor(memDC, RGB(255, 255, 255));
-        RECT rcPct{ barX, barY, barX + barWidth, barY + barHeight };
-        DrawTextW(memDC, pct.c_str(), -1, &rcPct,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        SelectObject(memDC, oldFont);
-        DeleteObject(barFont);
+        Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 255, 255, 255));
+        gfx.DrawString(pct.c_str(), -1, &font, textRect, &format, &textBrush);
 
         // Blit only the updated region to screen
         BLENDFUNCTION bf{ AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
