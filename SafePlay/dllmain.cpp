@@ -318,34 +318,10 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         HDC hdc = GetDC(hwnd);
         RECT rc;
         GetClientRect(hwnd, &rc);
-        int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
-        HFONT titleFont = CreateFontW(-MulDiv(14, dpi, 72), 0, 0, 0, FW_SEMIBOLD,
-            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-        HFONT subFont = CreateFontW(-MulDiv(11, dpi, 72), 0, 0, 0, FW_NORMAL,
-            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-        int iconSize = 32;
-        int circleX = 16;
-        int textX = circleX + iconSize + 16;
-        int textWidth = rc.right - textX - 16;
-        RECT calc{ 0,0,textWidth,0 };
-        SelectObject(hdc, titleFont);
-        DrawTextW(hdc, L"SafePlay – Anti-Cheat & Fair-Play", -1, &calc, DT_CALCRECT);
-        int titleH = calc.bottom;
-        SelectObject(hdc, subFont);
-        calc = { 0,0,textWidth,0 };
-        DrawTextW(hdc, data->status.c_str(), -1, &calc, DT_CALCRECT);
-        int subH = calc.bottom;
-        int textHeight = titleH + 8 + subH + 8 + PROGRESS_HEIGHT;
-        int textY = (POPUP_HEIGHT - textHeight) / 2;
-        RECT rcSub{ textX, textY + titleH + 8, textX + textWidth, textY + titleH + 8 + subH };
         int barWidth = rc.right - PROGRESS_PADDING * 2;
         int barX = PROGRESS_PADDING;
-        int barY = rcSub.bottom + 8;
+        int barY = (rc.bottom - PROGRESS_HEIGHT) / 2;
         data->progressRect = { barX, barY, barX + barWidth, barY + PROGRESS_HEIGHT };
-        DeleteObject(titleFont);
-        DeleteObject(subFont);
         ReleaseDC(hwnd, hdc);
 
         // Load SafePlay logo from various locations
@@ -408,84 +384,15 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         if (data->logo) {
             gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
             gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-
-            const Gdiplus::REAL iw = (Gdiplus::REAL)data->logo->GetWidth();
-            const Gdiplus::REAL ih = (Gdiplus::REAL)data->logo->GetHeight();
-            const Gdiplus::REAL cw = (Gdiplus::REAL)width;
-            const Gdiplus::REAL ch = (Gdiplus::REAL)height;
-            const Gdiplus::REAL sx = cw / iw;
-            const Gdiplus::REAL sy = ch / ih;
-            const Gdiplus::REAL s  = max(sx, sy);          // cover
-            const Gdiplus::REAL dw = iw * s;
-            const Gdiplus::REAL dh = ih * s;
-            const Gdiplus::REAL dx = (cw - dw) * 0.5f;
-            const Gdiplus::REAL dy = (ch - dh) * 0.5f;
-
-            gfx.DrawImage(data->logo, Gdiplus::RectF(dx, dy, dw, dh));
-
-            // Dim to improve text readability
-            Gdiplus::SolidBrush dim(Gdiplus::Color(160, 0, 0, 0));
-            gfx.FillRectangle(&dim, Gdiplus::RectF(0, 0, cw, ch));
+            gfx.DrawImage(data->logo, Gdiplus::RectF(0, 0, (Gdiplus::REAL)width, (Gdiplus::REAL)height));
         } else {
-            TRIVERTEX vert[2] = {
-                { rc.left, rc.top,   0x2B * 256, 0x2B * 256, 0x2B * 256, 0xFFFF },
-                { rc.right, rc.bottom, 0x1F * 256, 0x1F * 256, 0x1F * 256, 0xFFFF }
-            };
-            GRADIENT_RECT gRect = { 0,1 };
-            GradientFill(memDC, vert, 2, &gRect, 1, GRADIENT_FILL_RECT_V);
+            Gdiplus::SolidBrush white(Gdiplus::Color(0xFF, 0xFF, 0xFF, 0xFF));
+            gfx.FillRectangle(&white, Gdiplus::RectF(0, 0, (Gdiplus::REAL)width, (Gdiplus::REAL)height));
         }
 
-        int iconSize = 32;
-        int circleX = 16;
-        int circleY = (POPUP_HEIGHT - iconSize) / 2;
-        Gdiplus::SolidBrush badgeBrush(Gdiplus::Color(0xFF, 0x3A, 0x3A, 0x3A));
-        gfx.FillEllipse(&badgeBrush, (Gdiplus::REAL)circleX, (Gdiplus::REAL)circleY,
-                        (Gdiplus::REAL)iconSize, (Gdiplus::REAL)iconSize);
-
-        if (data->logo) {
-            gfx.DrawImage(data->logo, circleX, circleY, iconSize, iconSize);
-        } else {
-            HICON icon = LoadIconW(NULL, MAKEINTRESOURCEW(32518)); // IDI_SHIELD
-            DrawIconEx(memDC, circleX, circleY, icon, iconSize, iconSize, 0, NULL, DI_NORMAL);
-        }
-
-        SetBkMode(memDC, TRANSPARENT);
-        int dpi = GetDeviceCaps(memDC, LOGPIXELSY);
-        HFONT titleFont = CreateFontW(-MulDiv(14, dpi, 72), 0, 0, 0, FW_SEMIBOLD,
-            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-        HFONT subFont = CreateFontW(-MulDiv(11, dpi, 72), 0, 0, 0, FW_NORMAL,
-            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-
-        int textX = circleX + iconSize + 16;
-        int textWidth = rc.right - textX - 16;
-
-        RECT calc{ 0,0,textWidth,0 };
-        SelectObject(memDC, titleFont);
-        DrawTextW(memDC, L"SafePlay – Anti-Cheat & Fair-Play", -1, &calc, DT_CALCRECT);
-        int titleH = calc.bottom;
-        SelectObject(memDC, subFont);
-        calc = { 0,0,textWidth,0 };
-        DrawTextW(memDC, data->status.c_str(), -1, &calc, DT_CALCRECT);
-        int subH = calc.bottom;
-
-        int textHeight = titleH + 8 + subH + 8 + PROGRESS_HEIGHT;
-        int textY = (POPUP_HEIGHT - textHeight) / 2;
-
-        RECT rcTitle{ textX, textY, textX + textWidth, textY + titleH };
-        SelectObject(memDC, titleFont);
-        SetTextColor(memDC, RGB(255, 255, 255));
-        DrawTextW(memDC, L"SafePlay – Anti-Cheat & Fair-Play", -1, &rcTitle, DT_LEFT | DT_TOP);
-
-        RECT rcSub{ textX, textY + titleH + 8, textX + textWidth, textY + titleH + 8 + subH };
-        SelectObject(memDC, subFont);
-        SetTextColor(memDC, RGB(0xCF, 0xCF, 0xCF));
-        DrawTextW(memDC, data->status.c_str(), -1, &rcSub, DT_LEFT | DT_TOP);
-
-        int barWidth = rc.right - PROGRESS_PADDING * 2;
-        int barX = PROGRESS_PADDING;
-        int barY = rcSub.bottom + 8;
+        int barWidth = data->progressRect.right - data->progressRect.left;
+        int barX = data->progressRect.left;
+        int barY = data->progressRect.top;
 
         Gdiplus::GraphicsPath trackPath;
         Gdiplus::REAL x = (Gdiplus::REAL)barX;
@@ -499,40 +406,8 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         trackPath.AddArc(x, y + h - r*2, r*2, r*2, 90, 90);
         trackPath.CloseFigure();
 
-        gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-        gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-
-        if (data->logo) {
-            // Clip to the rounded track and draw the logo as the background (cover fit)
-            Gdiplus::Region clip(&trackPath);
-            gfx.SetClip(&clip, Gdiplus::CombineModeReplace);
-
-            const Gdiplus::REAL iw = (Gdiplus::REAL)data->logo->GetWidth();
-            const Gdiplus::REAL ih = (Gdiplus::REAL)data->logo->GetHeight();
-            const Gdiplus::REAL sx = w / iw;
-            const Gdiplus::REAL sy = h / ih;
-            const Gdiplus::REAL s  = max(sx, sy);            // cover
-            const Gdiplus::REAL dw = iw * s;
-            const Gdiplus::REAL dh = ih * s;
-            const Gdiplus::REAL dx = x + (w - dw) * 0.5f;    // center inside bar
-            const Gdiplus::REAL dy = y + (h - dh) * 0.5f;
-
-            gfx.DrawImage(data->logo, Gdiplus::RectF(dx, dy, dw, dh));
-
-            // Optional: dim slightly so the fill + % text remain readable
-            Gdiplus::SolidBrush dimBrush(Gdiplus::Color(90, 0, 0, 0));
-            gfx.FillPath(&dimBrush, &trackPath);
-
-            // Optional: subtle outline for crisp edges
-            Gdiplus::Pen outline(Gdiplus::Color(140, 255, 255, 255), 1.f);
-            gfx.DrawPath(&outline, &trackPath);
-
-            gfx.ResetClip();
-        } else {
-            // Fallback if the image isn't available
-            Gdiplus::SolidBrush trackBrush(Gdiplus::Color(0xFF, 0x3A, 0x3A, 0x3A));
-            gfx.FillPath(&trackBrush, &trackPath);
-        }
+        Gdiplus::SolidBrush trackBrush(Gdiplus::Color(0xFF, 0x3A, 0x3A, 0x3A));
+        gfx.FillPath(&trackBrush, &trackPath);
 
         int fillWidth = barWidth * data->progress / 100;
         if (fillWidth > 0) {
@@ -552,19 +427,18 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             gfx.FillPath(&pbrush, &fillPath);
         }
 
+        SetBkMode(memDC, TRANSPARENT);
+        int dpi = GetDeviceCaps(memDC, LOGPIXELSY);
         HFONT barFont = CreateFontW(-MulDiv(10, dpi, 72), 0, 0, 0, FW_NORMAL,
             FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
             CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
         SelectObject(memDC, barFont);
-        SetTextColor(memDC, RGB(0xCF, 0xCF, 0xCF));
+        SetTextColor(memDC, RGB(255, 255, 255));
         std::wstring pct = std::to_wstring(data->progress) + L"%";
         RECT rcPct{ barX, barY, barX + barWidth, barY + PROGRESS_HEIGHT };
         DrawTextW(memDC, pct.c_str(), -1, &rcPct,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         DeleteObject(barFont);
-
-        DeleteObject(titleFont);
-        DeleteObject(subFont);
 
         // Blit only the updated region to screen
         BitBlt(hdc, ps.rcPaint.left, ps.rcPaint.top,
