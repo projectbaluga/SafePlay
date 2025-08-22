@@ -43,6 +43,7 @@ static CloseHandle_t        RealCloseHandle;
 static GetFileAttributesW_t RealGetFileAttributesW;
 static GetFileAttributesA_t RealGetFileAttributesA;
 static ULONG_PTR gGdiplusToken;
+HMODULE g_hModule = nullptr;
 
 // Helper to patch IAT entries in the host module
 static void HookIAT(const char* dll, const char* name, void* hook, void** orig) {
@@ -298,7 +299,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
         // Load SafePlay logo
         wchar_t path[MAX_PATH];
-        GetModuleFileNameW(NULL, path, MAX_PATH);
+        GetModuleFileNameW(g_hModule, path, MAX_PATH);
         PathRemoveFileSpecW(path);
         PathAppendW(path, L"assets\\SafePlay.png");
         data->logo = Gdiplus::Bitmap::FromFile(path);
@@ -548,6 +549,7 @@ static DWORD WINAPI LoadingPopupThread(LPVOID) {
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
+        g_hModule = hModule;
         DisableThreadLibraryCalls(hModule);
 
         Gdiplus::GdiplusStartupInput gdiplusStartupInput;
