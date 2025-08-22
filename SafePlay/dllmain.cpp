@@ -296,7 +296,6 @@ static const int POPUP_WIDTH  = 300;
 static const int POPUP_HEIGHT = 120;
 static const int POPUP_MARGIN = 24;
 static const int POPUP_RADIUS = 16;
-static const int PROGRESS_RADIUS = 6;
 static const int PROGRESS_STEP = 2;
 
 static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -386,18 +385,27 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         int width = rc.right - rc.left;
         int height = rc.bottom - rc.top;
         HDC memDC = CreateCompatibleDC(hdc);
-        HBITMAP memBmp = CreateCompatibleBitmap(hdc, width, height);
+        BITMAPINFO bi{};
+        bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bi.bmiHeader.biWidth = width;
+        bi.bmiHeader.biHeight = -height;
+        bi.bmiHeader.biPlanes = 1;
+        bi.bmiHeader.biBitCount = 32;
+        bi.bmiHeader.biCompression = BI_RGB;
+        void* bits = nullptr;
+        HBITMAP memBmp = CreateDIBSection(memDC, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
         HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
 
         Gdiplus::Graphics gfx(memDC);
         gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
 
         Gdiplus::SolidBrush white(Gdiplus::Color(0xFF, 0xFF, 0xFF, 0xFF));
         gfx.FillRectangle(&white, Gdiplus::RectF(0, 0, (Gdiplus::REAL)width, (Gdiplus::REAL)height));
 
         if (data->logo) {
             gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-            gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+            gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
             gfx.DrawImage(data->logo, Gdiplus::RectF(0, 0, (Gdiplus::REAL)width, (Gdiplus::REAL)height));
         }
 
@@ -411,7 +419,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         Gdiplus::REAL y = (Gdiplus::REAL)barY;
         Gdiplus::REAL w = (Gdiplus::REAL)barWidth;
         Gdiplus::REAL h = (Gdiplus::REAL)barHeight;
-        Gdiplus::REAL r = (Gdiplus::REAL)PROGRESS_RADIUS;
+        Gdiplus::REAL r = (Gdiplus::REAL)barHeight / 2;
         trackPath.AddArc(x, y, r*2, r*2, 180, 90);
         trackPath.AddArc(x + w - r*2, y, r*2, r*2, 270, 90);
         trackPath.AddArc(x + w - r*2, y + h - r*2, r*2, r*2, 0, 90);
@@ -420,6 +428,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
         Gdiplus::SolidBrush trackBrush(Gdiplus::Color(0xFF, 0x3A, 0x3A, 0x3A));
         gfx.FillPath(&trackBrush, &trackPath);
+        Gdiplus::Pen outlinePen(Gdiplus::Color(0x80, 0x00, 0x00, 0x00), 1.0f);
 
         int fillWidth = barWidth * data->progress / 100;
         if (fillWidth > 0) {
@@ -437,7 +446,10 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 Gdiplus::Color(0xFF, 0x4A, 0x90, 0xE2),
                 Gdiplus::Color(0xFF, 0x35, 0x7A, 0xBD));
             gfx.FillPath(&pbrush, &fillPath);
+            gfx.DrawPath(&outlinePen, &fillPath);
         }
+
+        gfx.DrawPath(&outlinePen, &trackPath);
 
         SetBkMode(memDC, TRANSPARENT);
         int dpi = GetDeviceCaps(memDC, LOGPIXELSY);
@@ -460,10 +472,13 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         DeleteObject(barFont);
 
         // Blit only the updated region to screen
-        BitBlt(hdc, ps.rcPaint.left, ps.rcPaint.top,
+        BLENDFUNCTION bf{ AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+        AlphaBlend(hdc, ps.rcPaint.left, ps.rcPaint.top,
             ps.rcPaint.right - ps.rcPaint.left,
             ps.rcPaint.bottom - ps.rcPaint.top,
-            memDC, ps.rcPaint.left, ps.rcPaint.top, SRCCOPY);
+            memDC, ps.rcPaint.left, ps.rcPaint.top,
+            ps.rcPaint.right - ps.rcPaint.left,
+            ps.rcPaint.bottom - ps.rcPaint.top, bf);
         SelectObject(memDC, oldBmp);
         DeleteObject(memBmp);
         DeleteDC(memDC);
