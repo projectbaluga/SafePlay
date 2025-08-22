@@ -323,7 +323,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
         const int padX      = D(20);          // horizontal padding
         const int barH      = D(14);          // bar height
-        const float anchorY = 0.68f;          // place bar around 68% of popup height
+        const float anchorY = 0.90f;          // place bar around 68% of popup height
 
         // Compute rect
         int barWidth = (rc.right - rc.left) - padX * 2;
