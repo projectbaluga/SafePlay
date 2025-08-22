@@ -12,7 +12,10 @@
 #pragma comment(lib, "Msimg32.lib")
 #include <gdiplus.h>
 #pragma comment(lib, "Gdiplus.lib")
+#include <objidl.h>
+#pragma comment(lib, "Ole32.lib")
 #include "clientinfo.h"
+#include "resource.h"
 
 // --- Virtual clientinfo.xml handling ---
 struct MemoryFile {
@@ -63,6 +66,30 @@ static Gdiplus::Bitmap* LoadSafePlayLogo() {
             auto* bmp = Gdiplus::Bitmap::FromFile(cand[i]);
             if (bmp && bmp->GetLastStatus() == Gdiplus::Ok) return bmp;
             delete bmp;
+        }
+    }
+    // Fallback: load from embedded PNG resource
+    HRSRC hRes = FindResourceW(g_hModule, MAKEINTRESOURCEW(IDB_SAFEPLAY_LOGO), L"PNG");
+    if (hRes) {
+        HGLOBAL hData = LoadResource(g_hModule, hRes);
+        if (hData) {
+            void* pData = LockResource(hData);
+            DWORD size = SizeofResource(g_hModule, hRes);
+            if (pData && size) {
+                HGLOBAL hBuffer = GlobalAlloc(GMEM_MOVEABLE, size);
+                if (hBuffer) {
+                    void* pBuffer = GlobalLock(hBuffer);
+                    memcpy(pBuffer, pData, size);
+                    GlobalUnlock(hBuffer);
+                    IStream* pStream = nullptr;
+                    if (SUCCEEDED(CreateStreamOnHGlobal(hBuffer, TRUE, &pStream))) {
+                        auto* bmp = Gdiplus::Bitmap::FromStream(pStream);
+                        pStream->Release();
+                        if (bmp && bmp->GetLastStatus() == Gdiplus::Ok) return bmp;
+                        delete bmp;
+                    }
+                }
+            }
         }
     }
 
