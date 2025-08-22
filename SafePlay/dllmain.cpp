@@ -225,7 +225,7 @@ DWORD WINAPI ShowErrorAndExit(LPVOID lpParam)
     wchar_t msg[256];
     _snwprintf_s(msg, _countof(msg), _TRUNCATE,
         L"Cheating tool detected: %s\nThe game will now close.", tool);
-    MessageBoxW(NULL, msg, L"RagnaPH Anti-Cheat", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+    MessageBoxW(NULL, msg, L"SafePlay – Anti-Cheat & Fair-Play", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
     ExitProcess(0);
     return 0;
 }
@@ -280,7 +280,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         int textWidth = rc.right - textX - 16;
         RECT calc{ 0,0,textWidth,0 };
         SelectObject(hdc, titleFont);
-        DrawTextW(hdc, L"RagnaPH Anti-Cheat", -1, &calc, DT_CALCRECT);
+        DrawTextW(hdc, L"SafePlay – Anti-Cheat & Fair-Play", -1, &calc, DT_CALCRECT);
         int titleH = calc.bottom;
         SelectObject(hdc, subFont);
         calc = { 0,0,textWidth,0 };
@@ -397,7 +397,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
         RECT calc{ 0,0,textWidth,0 };
         SelectObject(memDC, titleFont);
-        DrawTextW(memDC, L"RagnaPH Anti-Cheat", -1, &calc, DT_CALCRECT);
+        DrawTextW(memDC, L"SafePlay – Anti-Cheat & Fair-Play", -1, &calc, DT_CALCRECT);
         int titleH = calc.bottom;
         SelectObject(memDC, subFont);
         calc = { 0,0,textWidth,0 };
@@ -410,7 +410,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         RECT rcTitle{ textX, textY, textX + textWidth, textY + titleH };
         SelectObject(memDC, titleFont);
         SetTextColor(memDC, RGB(255, 255, 255));
-        DrawTextW(memDC, L"RagnaPH Anti-Cheat", -1, &rcTitle, DT_LEFT | DT_TOP);
+        DrawTextW(memDC, L"SafePlay – Anti-Cheat & Fair-Play", -1, &rcTitle, DT_LEFT | DT_TOP);
 
         RECT rcSub{ textX, textY + titleH + 8, textX + textWidth, textY + titleH + 8 + subH };
         SelectObject(memDC, subFont);
@@ -433,8 +433,40 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         trackPath.AddArc(x, y + h - r*2, r*2, r*2, 90, 90);
         trackPath.CloseFigure();
 
-        Gdiplus::SolidBrush trackBrush(Gdiplus::Color(0xFF, 0x3A, 0x3A, 0x3A));
-        gfx.FillPath(&trackBrush, &trackPath);
+        gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+        if (data->logo) {
+            // Clip to the rounded track and draw the logo as the background (cover fit)
+            Gdiplus::Region clip(&trackPath);
+            gfx.SetClip(&clip, Gdiplus::CombineModeReplace);
+
+            const Gdiplus::REAL iw = (Gdiplus::REAL)data->logo->GetWidth();
+            const Gdiplus::REAL ih = (Gdiplus::REAL)data->logo->GetHeight();
+            const Gdiplus::REAL sx = w / iw;
+            const Gdiplus::REAL sy = h / ih;
+            const Gdiplus::REAL s  = max(sx, sy);            // cover
+            const Gdiplus::REAL dw = iw * s;
+            const Gdiplus::REAL dh = ih * s;
+            const Gdiplus::REAL dx = x + (w - dw) * 0.5f;    // center inside bar
+            const Gdiplus::REAL dy = y + (h - dh) * 0.5f;
+
+            gfx.DrawImage(data->logo, Gdiplus::RectF(dx, dy, dw, dh));
+
+            // Optional: dim slightly so the fill + % text remain readable
+            Gdiplus::SolidBrush dimBrush(Gdiplus::Color(90, 0, 0, 0));
+            gfx.FillPath(&dimBrush, &trackPath);
+
+            // Optional: subtle outline for crisp edges
+            Gdiplus::Pen outline(Gdiplus::Color(140, 255, 255, 255), 1.f);
+            gfx.DrawPath(&outline, &trackPath);
+
+            gfx.ResetClip();
+        } else {
+            // Fallback if the image isn't available
+            Gdiplus::SolidBrush trackBrush(Gdiplus::Color(0xFF, 0x3A, 0x3A, 0x3A));
+            gfx.FillPath(&trackBrush, &trackPath);
+        }
 
         int fillWidth = barWidth * data->progress / 100;
         if (fillWidth > 0) {
@@ -562,7 +594,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         gClientConfig = LoadClientInfoVirtual();
 
         if (!VerifyDataIni()) {
-            MessageBoxW(NULL, L"DATA.ini is missing or invalid.", L"RagnaPH Anti-Cheat", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+            MessageBoxW(NULL, L"DATA.ini is missing or invalid.", L"SafePlay – Anti-Cheat & Fair-Play", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
             return FALSE;
         }
 
