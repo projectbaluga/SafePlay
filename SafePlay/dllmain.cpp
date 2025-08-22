@@ -392,13 +392,13 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         Gdiplus::Graphics gfx(memDC);
         gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
+        Gdiplus::SolidBrush white(Gdiplus::Color(0xFF, 0xFF, 0xFF, 0xFF));
+        gfx.FillRectangle(&white, Gdiplus::RectF(0, 0, (Gdiplus::REAL)width, (Gdiplus::REAL)height));
+
         if (data->logo) {
             gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
             gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
             gfx.DrawImage(data->logo, Gdiplus::RectF(0, 0, (Gdiplus::REAL)width, (Gdiplus::REAL)height));
-        } else {
-            Gdiplus::SolidBrush white(Gdiplus::Color(0xFF, 0xFF, 0xFF, 0xFF));
-            gfx.FillRectangle(&white, Gdiplus::RectF(0, 0, (Gdiplus::REAL)width, (Gdiplus::REAL)height));
         }
 
         const int barX = data->progressRect.left;
