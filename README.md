@@ -2,9 +2,6 @@
   <img src="assets/SafePlay.png" alt="SafePlay logo"/>
 </p>
 
-# SafePlay – Anti-Cheat & Fair-Play
-**Fair Gaming, Every Time.**
-
 [![Built with SafePlay](https://img.shields.io/badge/Built%20with-SafePlay-007BFF?style=for-the-badge)](#)
 [![Fair Gaming Certified](https://img.shields.io/badge/Fair%20Gaming-Certified-brightgreen?style=for-the-badge)](#)
 
