@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/safeplay-logo.svg" alt="SafePlay logo" width="120" />
+  <img src="assets/SafePlay.png" alt="SafePlay logo"/>
 </p>
 
 # SafePlay – Anti-Cheat & Fair-Play
