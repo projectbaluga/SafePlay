@@ -405,12 +405,35 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         Gdiplus::Graphics gfx(memDC);
         gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
-        TRIVERTEX vert[2] = {
-            { rc.left, rc.top,   0x2B * 256, 0x2B * 256, 0x2B * 256, 0xFFFF },
-            { rc.right, rc.bottom, 0x1F * 256, 0x1F * 256, 0x1F * 256, 0xFFFF }
-        };
-        GRADIENT_RECT gRect = { 0,1 };
-        GradientFill(memDC, vert, 2, &gRect, 1, GRADIENT_FILL_RECT_V);
+        if (data->logo) {
+            gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+            gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+            const Gdiplus::REAL iw = (Gdiplus::REAL)data->logo->GetWidth();
+            const Gdiplus::REAL ih = (Gdiplus::REAL)data->logo->GetHeight();
+            const Gdiplus::REAL cw = (Gdiplus::REAL)width;
+            const Gdiplus::REAL ch = (Gdiplus::REAL)height;
+            const Gdiplus::REAL sx = cw / iw;
+            const Gdiplus::REAL sy = ch / ih;
+            const Gdiplus::REAL s  = max(sx, sy);          // cover
+            const Gdiplus::REAL dw = iw * s;
+            const Gdiplus::REAL dh = ih * s;
+            const Gdiplus::REAL dx = (cw - dw) * 0.5f;
+            const Gdiplus::REAL dy = (ch - dh) * 0.5f;
+
+            gfx.DrawImage(data->logo, Gdiplus::RectF(dx, dy, dw, dh));
+
+            // Dim to improve text readability
+            Gdiplus::SolidBrush dim(Gdiplus::Color(160, 0, 0, 0));
+            gfx.FillRectangle(&dim, Gdiplus::RectF(0, 0, cw, ch));
+        } else {
+            TRIVERTEX vert[2] = {
+                { rc.left, rc.top,   0x2B * 256, 0x2B * 256, 0x2B * 256, 0xFFFF },
+                { rc.right, rc.bottom, 0x1F * 256, 0x1F * 256, 0x1F * 256, 0xFFFF }
+            };
+            GRADIENT_RECT gRect = { 0,1 };
+            GradientFill(memDC, vert, 2, &gRect, 1, GRADIENT_FILL_RECT_V);
+        }
 
         int iconSize = 32;
         int circleX = 16;
