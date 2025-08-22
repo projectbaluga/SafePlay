@@ -296,8 +296,6 @@ static const int POPUP_WIDTH  = 300;
 static const int POPUP_HEIGHT = 120;
 static const int POPUP_MARGIN = 24;
 static const int POPUP_RADIUS = 16;
-static const int PROGRESS_HEIGHT = 12;
-static const int PROGRESS_PADDING = 16;
 static const int PROGRESS_RADIUS = 6;
 static const int PROGRESS_STEP = 2;
 
@@ -318,10 +316,23 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         HDC hdc = GetDC(hwnd);
         RECT rc;
         GetClientRect(hwnd, &rc);
-        int barWidth = rc.right - PROGRESS_PADDING * 2;
-        int barX = PROGRESS_PADDING;
-        int barY = (rc.bottom - PROGRESS_HEIGHT) / 2;
-        data->progressRect = { barX, barY, barX + barWidth, barY + PROGRESS_HEIGHT };
+
+        // DPI-aware metrics
+        int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+        auto D = [&](int px) { return MulDiv(px, dpi, 96); };
+
+        const int padX      = D(20);          // horizontal padding
+        const int barH      = D(14);          // bar height
+        const float anchorY = 0.68f;          // place bar around 68% of popup height
+
+        // Compute rect
+        int barWidth = (rc.right - rc.left) - padX * 2;
+        int barX     = rc.left + padX;
+        int barCY    = rc.top + int((rc.bottom - rc.top) * anchorY); // center line y
+        int barY     = barCY - barH / 2;
+
+        // Store for invalidation + paint
+        data->progressRect = { barX, barY, barX + barWidth, barY + barH };
         ReleaseDC(hwnd, hdc);
 
         // Load SafePlay logo from various locations
@@ -390,15 +401,16 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             gfx.FillRectangle(&white, Gdiplus::RectF(0, 0, (Gdiplus::REAL)width, (Gdiplus::REAL)height));
         }
 
-        int barWidth = data->progressRect.right - data->progressRect.left;
-        int barX = data->progressRect.left;
-        int barY = data->progressRect.top;
+        const int barX = data->progressRect.left;
+        const int barY = data->progressRect.top;
+        const int barWidth  = data->progressRect.right - data->progressRect.left;
+        const int barHeight = data->progressRect.bottom - data->progressRect.top;
 
         Gdiplus::GraphicsPath trackPath;
         Gdiplus::REAL x = (Gdiplus::REAL)barX;
         Gdiplus::REAL y = (Gdiplus::REAL)barY;
         Gdiplus::REAL w = (Gdiplus::REAL)barWidth;
-        Gdiplus::REAL h = (Gdiplus::REAL)PROGRESS_HEIGHT;
+        Gdiplus::REAL h = (Gdiplus::REAL)barHeight;
         Gdiplus::REAL r = (Gdiplus::REAL)PROGRESS_RADIUS;
         trackPath.AddArc(x, y, r*2, r*2, 180, 90);
         trackPath.AddArc(x + w - r*2, y, r*2, r*2, 270, 90);
@@ -429,15 +441,22 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
         SetBkMode(memDC, TRANSPARENT);
         int dpi = GetDeviceCaps(memDC, LOGPIXELSY);
-        HFONT barFont = CreateFontW(-MulDiv(10, dpi, 72), 0, 0, 0, FW_NORMAL,
+        HFONT barFont = CreateFontW(-MulDiv(10, dpi, 72), 0, 0, 0, FW_SEMIBOLD,
             FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
             CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-        SelectObject(memDC, barFont);
-        SetTextColor(memDC, RGB(255, 255, 255));
+        HFONT oldFont = (HFONT)SelectObject(memDC, barFont);
         std::wstring pct = std::to_wstring(data->progress) + L"%";
-        RECT rcPct{ barX, barY, barX + barWidth, barY + PROGRESS_HEIGHT };
+        // subtle text shadow for contrast
+        SetTextColor(memDC, RGB(0, 0, 0));
+        RECT rcPctShadow{ barX, barY + 1, barX + barWidth, barY + barHeight + 1 };
+        DrawTextW(memDC, pct.c_str(), -1, &rcPctShadow,
+            DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        // main text
+        SetTextColor(memDC, RGB(255, 255, 255));
+        RECT rcPct{ barX, barY, barX + barWidth, barY + barHeight };
         DrawTextW(memDC, pct.c_str(), -1, &rcPct,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        SelectObject(memDC, oldFont);
         DeleteObject(barFont);
 
         // Blit only the updated region to screen
