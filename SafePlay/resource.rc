@@ -1,0 +1,3 @@
+#include "resource.h"
+
+IDB_SAFEPLAY_LOGO PNG "..\\assets\\SafePlay.png"
