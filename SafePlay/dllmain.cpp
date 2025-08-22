@@ -52,11 +52,11 @@ static Gdiplus::Bitmap* LoadSafePlayLogo() {
 
     wchar_t cand[3][MAX_PATH];
     // 1) Same folder as the DLL
-    swprintf(cand[0], L"%s\\SafePlay.png", base);
+    swprintf(cand[0], MAX_PATH, L"%s\\SafePlay.png", base);
     // 2) assets\SafePlay.png next to the DLL
-    swprintf(cand[1], L"%s\\assets\\SafePlay.png", base);
+    swprintf(cand[1], MAX_PATH, L"%s\\assets\\SafePlay.png", base);
     // 3) Current working dir (game root)
-    swprintf(cand[2], L".\\SafePlay.png");
+    swprintf(cand[2], MAX_PATH, L".\\SafePlay.png");
 
     for (int i = 0; i < 3; ++i) {
         if (PathFileExistsW(cand[i])) {
