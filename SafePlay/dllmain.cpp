@@ -237,6 +237,7 @@ struct PopupData {
     BYTE finalAlpha;
     int progress;
     RECT progressRect;
+    Gdiplus::Bitmap* logo;
 };
 
 static const int POPUP_WIDTH  = 300;
@@ -294,6 +295,17 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         DeleteObject(titleFont);
         DeleteObject(subFont);
         ReleaseDC(hwnd, hdc);
+
+        // Load SafePlay logo
+        wchar_t path[MAX_PATH];
+        GetModuleFileNameW(NULL, path, MAX_PATH);
+        PathRemoveFileSpecW(path);
+        PathAppendW(path, L"assets\\SafePlay.png");
+        data->logo = Gdiplus::Bitmap::FromFile(path);
+        if (!data->logo || data->logo->GetLastStatus() != Gdiplus::Ok) {
+            delete data->logo;
+            data->logo = nullptr;
+        }
         return 0;
     }
     case WM_TIMER:
@@ -363,8 +375,12 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         gfx.FillEllipse(&badgeBrush, (Gdiplus::REAL)circleX, (Gdiplus::REAL)circleY,
                         (Gdiplus::REAL)iconSize, (Gdiplus::REAL)iconSize);
 
-        HICON icon = LoadIconW(NULL, MAKEINTRESOURCEW(32518)); // IDI_SHIELD
-        DrawIconEx(memDC, circleX, circleY, icon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+        if (data->logo) {
+            gfx.DrawImage(data->logo, circleX, circleY, iconSize, iconSize);
+        } else {
+            HICON icon = LoadIconW(NULL, MAKEINTRESOURCEW(32518)); // IDI_SHIELD
+            DrawIconEx(memDC, circleX, circleY, icon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+        }
 
         SetBkMode(memDC, TRANSPARENT);
         int dpi = GetDeviceCaps(memDC, LOGPIXELSY);
@@ -463,6 +479,10 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         return 0;
     }
     case WM_DESTROY:
+        if (data && data->logo) {
+            delete data->logo;
+            data->logo = nullptr;
+        }
         PostQuitMessage(0);
         return 0;
     }
@@ -484,6 +504,7 @@ static void ShowStatusPopup(const wchar_t* text)
     data.startTime = GetTickCount();
     data.finalAlpha = (BYTE)(255 * 85 / 100); // 85% opacity
     data.progress = 0;
+    data.logo = nullptr;
 
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
