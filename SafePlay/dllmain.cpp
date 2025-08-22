@@ -45,6 +45,30 @@ static GetFileAttributesA_t RealGetFileAttributesA;
 static ULONG_PTR gGdiplusToken;
 HMODULE g_hModule = nullptr;
 
+static Gdiplus::Bitmap* LoadSafePlayLogo() {
+    wchar_t base[MAX_PATH];
+    GetModuleFileNameW(g_hModule, base, MAX_PATH);
+    PathRemoveFileSpecW(base);
+
+    wchar_t cand[3][MAX_PATH];
+    // 1) Same folder as the DLL
+    swprintf(cand[0], L"%s\\SafePlay.png", base);
+    // 2) assets\SafePlay.png next to the DLL
+    swprintf(cand[1], L"%s\\assets\\SafePlay.png", base);
+    // 3) Current working dir (game root)
+    swprintf(cand[2], L".\\SafePlay.png");
+
+    for (int i = 0; i < 3; ++i) {
+        if (PathFileExistsW(cand[i])) {
+            auto* bmp = Gdiplus::Bitmap::FromFile(cand[i]);
+            if (bmp && bmp->GetLastStatus() == Gdiplus::Ok) return bmp;
+            delete bmp;
+        }
+    }
+
+    return nullptr;
+}
+
 // Helper to patch IAT entries in the host module
 static void HookIAT(const char* dll, const char* name, void* hook, void** orig) {
     HMODULE base = GetModuleHandleW(NULL);
@@ -225,7 +249,7 @@ DWORD WINAPI ShowErrorAndExit(LPVOID lpParam)
     wchar_t msg[256];
     _snwprintf_s(msg, _countof(msg), _TRUNCATE,
         L"Cheating tool detected: %s\nThe game will now close.", tool);
-    MessageBoxW(NULL, msg, L"SafePlay – Anti-Cheat & Fair-Play", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+    MessageBoxW(NULL, msg, L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
     ExitProcess(0);
     return 0;
 }
@@ -297,16 +321,8 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         DeleteObject(subFont);
         ReleaseDC(hwnd, hdc);
 
-        // Load SafePlay logo
-        wchar_t path[MAX_PATH];
-        GetModuleFileNameW(g_hModule, path, MAX_PATH);
-        PathRemoveFileSpecW(path);
-        PathAppendW(path, L"assets\\SafePlay.png");
-        data->logo = Gdiplus::Bitmap::FromFile(path);
-        if (!data->logo || data->logo->GetLastStatus() != Gdiplus::Ok) {
-            delete data->logo;
-            data->logo = nullptr;
-        }
+        // Load SafePlay logo from various locations
+        data->logo = LoadSafePlayLogo();
         return 0;
     }
     case WM_TIMER:
@@ -594,7 +610,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         gClientConfig = LoadClientInfoVirtual();
 
         if (!VerifyDataIni()) {
-            MessageBoxW(NULL, L"DATA.ini is missing or invalid.", L"SafePlay – Anti-Cheat & Fair-Play", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+            MessageBoxW(NULL, L"DATA.ini is missing or invalid.", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
             return FALSE;
         }
 
