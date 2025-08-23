@@ -14,6 +14,8 @@
 #pragma comment(lib, "Gdiplus.lib")
 #include <objidl.h>
 #pragma comment(lib, "Ole32.lib")
+#include <shellapi.h>
+#pragma comment(lib, "Shell32.lib")
 #include "clientinfo.h"
 #include "resource.h"
 
@@ -47,6 +49,7 @@ static GetFileAttributesW_t RealGetFileAttributesW;
 static GetFileAttributesA_t RealGetFileAttributesA;
 static ULONG_PTR gGdiplusToken;
 HMODULE g_hModule = nullptr;
+static HANDLE g_hProgressDone = NULL;
 
 static Gdiplus::Bitmap* LoadSafePlayLogo() {
     wchar_t base[MAX_PATH];
@@ -547,6 +550,15 @@ DWORD WINAPI ProtectionThread(LPVOID lpParam); // Declare your ProtectionThread
 // Run loading popup on a separate thread so game can initialize concurrently
 static DWORD WINAPI LoadingPopupThread(LPVOID) {
     ShowStatusPopup(L"Loading...");
+    if (g_hProgressDone) {
+        SetEvent(g_hProgressDone);
+    }
+    return 0;
+}
+
+static DWORD WINAPI LaunchGameThread(LPVOID) {
+    WaitForSingleObject(g_hProgressDone, INFINITE);
+    ShellExecuteW(NULL, L"open", L"RagnaPH.exe", NULL, NULL, SW_SHOWNORMAL);
     return 0;
 }
 
@@ -560,9 +572,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         Gdiplus::GdiplusStartupInput gdiplusStartupInput;
         Gdiplus::GdiplusStartup(&gGdiplusToken, &gdiplusStartupInput, NULL);
 
+        g_hProgressDone = CreateEvent(NULL, TRUE, FALSE, NULL);
         // Show loading popup without blocking game startup
         HANDLE hPopup = CreateThread(NULL, 0, LoadingPopupThread, NULL, 0, NULL);
+        HANDLE hLaunch = CreateThread(NULL, 0, LaunchGameThread, NULL, 0, NULL);
         if (hPopup) CloseHandle(hPopup);
+        if (hLaunch) CloseHandle(hLaunch);
 
         gClientConfig = LoadClientInfoVirtual();
 
@@ -587,6 +602,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         CloseHandle(hThread);
     } else if (reason == DLL_PROCESS_DETACH) {
         Gdiplus::GdiplusShutdown(gGdiplusToken);
+        if (g_hProgressDone) {
+            CloseHandle(g_hProgressDone);
+            g_hProgressDone = NULL;
+        }
     }
     return TRUE;
 }
