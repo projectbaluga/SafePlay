@@ -286,7 +286,7 @@ DWORD WINAPI ShowErrorAndExit(LPVOID lpParam)
 
 struct PopupData {
     std::wstring status;
-    DWORD startTime;
+    ULONGLONG startTime;
     int finalX;
     int finalY;
     BYTE finalAlpha;
@@ -343,8 +343,8 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     }
     case WM_TIMER:
         if (wParam == 1) {
-            DWORD now = GetTickCount();
-            float t = (now - data->startTime) / 250.0f;
+            ULONGLONG now = GetTickCount64();
+            float t = float(now - data->startTime) / 250.0f;
             if (t >= 1.0f) {
                 t = 1.0f;
                 KillTimer(hwnd, 1);
@@ -359,12 +359,12 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             InvalidateRect(hwnd, &data->progressRect, FALSE);
             if (data->progress >= 100) {
                 KillTimer(hwnd, 2);
-                data->startTime = GetTickCount();
+                data->startTime = GetTickCount64();
                 SetTimer(hwnd, 3, 15, NULL); // fade-out
             }
         } else if (wParam == 3) {
-            DWORD now = GetTickCount();
-            float t = (now - data->startTime) / 150.0f;
+            ULONGLONG now = GetTickCount64();
+            float t = float(now - data->startTime) / 150.0f;
             if (t >= 1.0f) {
                 DestroyWindow(hwnd);
             } else {
@@ -376,7 +376,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     case WM_LBUTTONUP:
         KillTimer(hwnd, 1);
         KillTimer(hwnd, 2);
-        data->startTime = GetTickCount();
+        data->startTime = GetTickCount64();
         SetTimer(hwnd, 3, 15, NULL);
         return 0;
     case WM_PAINT:
@@ -510,7 +510,7 @@ static void ShowStatusPopup(const wchar_t* text)
 
     PopupData data{};
     data.status = text;
-    data.startTime = GetTickCount();
+    data.startTime = GetTickCount64();
     data.finalAlpha = (BYTE)(255 * 85 / 100); // 85% opacity
     data.progress = 0;
     data.logo = nullptr;
