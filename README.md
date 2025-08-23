@@ -6,33 +6,40 @@
 [![Fair Gaming Certified](https://img.shields.io/badge/Fair%20Gaming-Certified-brightgreen?style=for-the-badge)](#)
 
 ## Overview
-SafePlay is a universal anti-cheat and fair-play system for PC games. The lightweight DLL monitors running processes, validates client integrity, and blocks known cheat tools to keep gameplay fair across titles.
+SafePlay is a lightweight Windows DLL designed to keep Ragnarok Online clients and other PC games fair. It injects into the
+game process, provides a trusted client configuration, and continuously scans the system for known cheat tools.
 
-**Target Users:** Game developers, publishers, and server administrators who want to ensure integrity and fairness.
+**Target Users:** Game developers, publishers, and server administrators who want to enforce fair play.
 
-## Features
-- Multi-vector detection (process names, window titles, loaded modules, memory signatures)
-- Configurable banned lists
-- Secure client integrity validation
-- Customizable alerts and blocking
+## How It Works
+* **Embedded configuration** – `clientinfo.xml` is stored in the DLL and is served from memory so the game always connects to
+  the approved server settings.
+* **Integrity check** – the library verifies that `Data.ini` contains the expected resource listing before starting.
+* **API hooking** – kernel32 file APIs are patched via the Import Address Table to redirect file access to the in-memory
+  configuration and to hide the virtual file handle.
+* **Background protection thread** – every five seconds the DLL enumerates running processes and evaluates them against several
+  detection vectors:
+  - executable names on a banned list
+  - suspicious window titles
+  - loaded modules
+  - static memory signatures (e.g. `4RTools`)
+* **User feedback** – during startup a small non-blocking popup with a progress bar is displayed.
+* When any banned tool is detected a message box identifies the offending program and the game is terminated.
 
-## Architecture
-SafePlay is a Windows DLL that scans active processes periodically and blocks known cheat tools.
-
-**Planned Enhancements**
-- Launcher integration
-- Cloud updates
-- Configuration tools
-
-## Getting Started
+## Building
 1. Clone the repository:
    ```powershell
    git clone https://github.com/projectbaluga/SafePlay.git
    cd SafePlay
    ```
 2. Open `SafePlay.sln` in Visual Studio 2022.
-3. Build the project for your target configuration.
-4. Deploy `SafePlay.dll` beside your game executable or inject it as needed.
+3. Build the `SafePlay` project to produce `SafePlay.dll`.
+4. Place `SafePlay.dll` beside your game executable or inject it at runtime.
+
+## Configuration
+* Modify `SafePlay/clientinfo.h` to change the embedded server address, port, or other client settings.
+* `Data.ini` must have `data.grf` as its first entry – the DLL validates this file before enabling protection.
+* Extend the banned executable, window, module, or memory signature lists in `SafePlay/dllmain.cpp` to detect additional tools.
 
 ## Roadmap
 - Cross-game compatibility
@@ -44,3 +51,4 @@ SafePlay is a Windows DLL that scans active processes periodically and blocks kn
 
 ## License
 This project is licensed under the [MIT License](LICENSE).
+
