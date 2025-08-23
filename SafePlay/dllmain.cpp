@@ -558,7 +558,22 @@ static DWORD WINAPI LoadingPopupThread(LPVOID) {
 
 static DWORD WINAPI LaunchGameThread(LPVOID) {
     WaitForSingleObject(g_hProgressDone, INFINITE);
-    ShellExecuteW(NULL, L"open", L"RagnaPH.exe", NULL, NULL, SW_SHOWNORMAL);
+
+    wchar_t base[MAX_PATH];
+    GetModuleFileNameW(g_hModule, base, MAX_PATH);
+    PathRemoveFileSpecW(base);
+
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.lpFile = L"RagnaPH.exe";
+    sei.nShow = SW_SHOWNORMAL;
+    sei.lpDirectory = base;
+
+    if (ShellExecuteExW(&sei)) {
+        WaitForSingleObject(sei.hProcess, INFINITE);
+        CloseHandle(sei.hProcess);
+    }
     return 0;
 }
 
