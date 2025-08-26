@@ -269,6 +269,12 @@ static bool VerifyDataIni() {
 
 // Determine if the current process was launched by the official launcher
 static bool IsLaunchedFromLauncher() {
+    // The launcher sets a short-lived environment variable to prove it
+    // started the game. Checking this first avoids a slow process scan
+    // which may fail if the launcher exits immediately.
+    if (GetEnvironmentVariableW(L"RAGNAPH_LAUNCHED", NULL, 0) > 0)
+        return true;
+
     DWORD pid = GetCurrentProcessId();
     DWORD parentPid = 0;
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
