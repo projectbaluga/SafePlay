@@ -269,6 +269,18 @@ static bool VerifyDataIni() {
 
 // Verify that the current process was started by the official launcher
 static bool IsLaunchedFromLauncher() {
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (_wcsicmp(argv[i], L"--from-launcher") == 0) {
+                LocalFree(argv);
+                return true;
+            }
+        }
+        LocalFree(argv);
+    }
+
     DWORD pid = GetCurrentProcessId();
 
     // Walk up the process tree and look for the official launcher anywhere in
@@ -620,7 +632,7 @@ static DWORD WINAPI LoadingPopupThread(LPVOID) {
 
 static DWORD WINAPI LaunchGameThread(LPVOID) {
     WaitForSingleObject(g_hProgressDone, INFINITE);
-    ShellExecuteW(NULL, L"open", L"RagnaPH.exe", NULL, NULL, SW_SHOWNORMAL);
+    ShellExecuteW(NULL, L"open", L"RagnaPH.exe", L"--from-launcher", NULL, SW_SHOWNORMAL);
     return 0;
 }
 
