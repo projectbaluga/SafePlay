@@ -355,7 +355,6 @@ static bool IsLaunchedFromLauncher() {
 DWORD WINAPI ProtectionThread(LPVOID lpParam);
 DWORD WINAPI ShowErrorAndExit(LPVOID lpParam);
 DWORD WINAPI ShowLauncherErrorAndExit(LPVOID);
-DWORD WINAPI ShowHookedNotification(LPVOID);
 const wchar_t* GetDetectedCheatTool(DWORD pid);
 
 // Show an error message and terminate the game
@@ -381,12 +380,11 @@ DWORD WINAPI ShowLauncherErrorAndExit(LPVOID)
 }
 
 // Notify the user when the launcher has been hooked successfully
-DWORD WINAPI ShowHookedNotification(LPVOID)
+static void ShowHookedNotification()
 {
     MessageBoxW(NULL,
         L"SafePlay successfully hooked into RagnaPH Launcher.exe.",
         L"SafePlay", MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
-    return 0;
 }
 
 struct PopupData {
@@ -662,6 +660,8 @@ static DWORD WINAPI LoadingPopupThread(LPVOID) {
 }
 
 static DWORD WINAPI LaunchGameThread(LPVOID) {
+    // Display the hook notification before starting the game
+    ShowHookedNotification();
     WaitForSingleObject(g_hProgressDone, INFINITE);
     HANDLE hReady = CreateEventW(NULL, TRUE, FALSE, kReadyEventName);
     ShellExecuteW(NULL, L"open", L"RagnaPH.exe", L"--from-launcher", NULL, SW_SHOWNORMAL);
@@ -682,10 +682,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         const wchar_t* processName = PathFindFileNameW(processPath);
         // Handle launcher and game processes separately to avoid accidental self-launching
         if (_wcsicmp(processName, L"RagnaPH Launcher.exe") == 0) {
-            // Notify when hooked into the official launcher
-            HANDLE hNotify = CreateThread(NULL, 0, ShowHookedNotification, NULL, 0, NULL);
-            if (hNotify) CloseHandle(hNotify);
-            // When injected into the official launcher, start the game after the popup
+            // When injected into the official launcher, show notification then start the game
             HANDLE hLaunch = CreateThread(NULL, 0, LaunchGameThread, NULL, 0, NULL);
             if (hLaunch) CloseHandle(hLaunch);
         } else if (_wcsicmp(processName, L"RagnaPH.exe") == 0) {
