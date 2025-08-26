@@ -267,9 +267,52 @@ static bool VerifyDataIni() {
     return true;
 }
 
+// Verify that the current process was started by the official launcher
+static bool IsLaunchedFromLauncher() {
+    DWORD pid = GetCurrentProcessId();
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE)
+        return false;
+
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    DWORD parentPid = 0;
+
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            if (pe.th32ProcessID == pid) {
+                parentPid = pe.th32ParentProcessID;
+                break;
+            }
+        } while (Process32NextW(snap, &pe));
+    }
+
+    CloseHandle(snap);
+    if (!parentPid)
+        return false;
+
+    HANDLE hParent = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parentPid);
+    if (!hParent)
+        return false;
+
+    wchar_t path[MAX_PATH];
+    DWORD size = MAX_PATH;
+    bool ok = false;
+
+    if (QueryFullProcessImageNameW(hParent, 0, path, &size)) {
+        const wchar_t* name = PathFindFileNameW(path);
+        if (_wcsicmp(name, L"RagnaPH Launcher.exe") == 0)
+            ok = true;
+    }
+
+    CloseHandle(hParent);
+    return ok;
+}
+
 // Function prototypes
 DWORD WINAPI ProtectionThread(LPVOID lpParam);
 DWORD WINAPI ShowErrorAndExit(LPVOID lpParam);
+DWORD WINAPI ShowLauncherErrorAndExit(LPVOID);
 const wchar_t* GetDetectedCheatTool(DWORD pid);
 
 // Show an error message and terminate the game
@@ -280,6 +323,16 @@ DWORD WINAPI ShowErrorAndExit(LPVOID lpParam)
     _snwprintf_s(msg, _countof(msg), _TRUNCATE,
         L"Cheating tool detected: %s\nThe game will now close.", tool);
     MessageBoxW(NULL, msg, L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+    ExitProcess(0);
+    return 0;
+}
+
+// Show launcher error and terminate the game
+DWORD WINAPI ShowLauncherErrorAndExit(LPVOID)
+{
+    MessageBoxW(NULL,
+        L"Please launch the game via RagnaPH Launcher.exe.",
+        L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
     ExitProcess(0);
     return 0;
 }
@@ -562,12 +615,25 @@ static DWORD WINAPI LaunchGameThread(LPVOID) {
     return 0;
 }
 
-// --- MODIFIED DLLMAIN --- //
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
         g_hModule = hModule;
         DisableThreadLibraryCalls(hModule);
+        wchar_t processPath[MAX_PATH];
+        GetModuleFileNameW(NULL, processPath, MAX_PATH);
+        const wchar_t* processName = PathFindFileNameW(processPath);
+        // If we are the game process, ensure it was launched by the official launcher
+        if (_wcsicmp(processName, L"RagnaPH.exe") == 0) {
+            if (!IsLaunchedFromLauncher()) {
+                CreateThread(NULL, 0, ShowLauncherErrorAndExit, NULL, 0, NULL);
+                return TRUE;
+            }
+        } else {
+            // Prevent infinite self-launching when injected into the launcher
+            HANDLE hLaunch = CreateThread(NULL, 0, LaunchGameThread, NULL, 0, NULL);
+            if (hLaunch) CloseHandle(hLaunch);
+        }
 
         Gdiplus::GdiplusStartupInput gdiplusStartupInput;
         Gdiplus::GdiplusStartup(&gGdiplusToken, &gdiplusStartupInput, NULL);
@@ -575,15 +641,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         g_hProgressDone = CreateEvent(NULL, FALSE, FALSE, NULL);
         // Show loading popup without blocking game startup
         HANDLE hPopup = CreateThread(NULL, 0, LoadingPopupThread, NULL, 0, NULL);
-
-        wchar_t processPath[MAX_PATH];
-        GetModuleFileNameW(NULL, processPath, MAX_PATH);
-        const wchar_t* processName = PathFindFileNameW(processPath);
-        // Prevent infinite self-launching when the DLL is injected into the game executable itself
-        if (_wcsicmp(processName, L"RagnaPH.exe") != 0) {
-            HANDLE hLaunch = CreateThread(NULL, 0, LaunchGameThread, NULL, 0, NULL);
-            if (hLaunch) CloseHandle(hLaunch);
-        }
 
         if (hPopup) CloseHandle(hPopup);
 
