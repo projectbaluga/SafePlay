@@ -15,6 +15,7 @@ game process, provides a trusted client configuration, and continuously scans th
 * **Embedded configuration** – `clientinfo.xml` is stored in the DLL and is served from memory so the game always connects to
   the approved server settings.
 * **Integrity check** – the library verifies that `Data.ini` contains the expected resource listing before starting.
+* **Launcher enforcement** – `RagnaPH.exe` only starts when launched with a token provided by `RagnaPH Launcher.exe`, preventing manual execution.
 * **API hooking** – kernel32 file APIs are patched via the Import Address Table to redirect file access to the in-memory
   configuration and to hide the virtual file handle.
 * **Background protection thread** – every five seconds the DLL enumerates running processes and evaluates them against several
@@ -40,6 +41,7 @@ game process, provides a trusted client configuration, and continuously scans th
 * Modify `SafePlay/clientinfo.h` to change the embedded server address, port, or other client settings.
 * `Data.ini` must have `data.grf` as its first entry – the DLL validates this file before enabling protection.
 * Extend the banned executable, window, module, or memory signature lists in `SafePlay/dllmain.cpp` to detect additional tools.
+* The launcher must set environment variable `RAGNAPH_LAUNCHED=1` or pass `--from-launcher` when starting `RagnaPH.exe`.
 
 ## Roadmap
 - Cross-game compatibility
