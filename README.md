@@ -9,6 +9,8 @@
 SafePlay is a lightweight Windows DLL designed to keep Ragnarok Online clients and other PC games fair. It injects into the
 game process, provides a trusted client configuration, and continuously scans the system for known cheat tools.
 
+A companion **SafePlay.exe** launcher is provided to start `RagnaPH.exe` from a trusted wrapper.
+
 **Target Users:** Game developers, publishers, and server administrators who want to enforce fair play.
 
 ## How It Works
