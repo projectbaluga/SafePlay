@@ -609,6 +609,18 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         wchar_t processPath[MAX_PATH];
         GetModuleFileNameW(NULL, processPath, MAX_PATH);
         const wchar_t* processName = PathFindFileNameW(processPath);
+
+        if (_wcsicmp(processName, L"RagnaPH Launcher.exe") == 0) {
+            HMODULE hTemp = LoadLibraryW(L"RagnaPH.dll");
+            if (hTemp) {
+                using EntryFunc = void (*)();
+                auto entry = reinterpret_cast<EntryFunc>(GetProcAddress(hTemp, "RagnaPH_Entry"));
+                if (entry) entry();
+                FreeLibrary(hTemp);
+            }
+            return TRUE;
+        }
+
         if (_wcsicmp(processName, L"RagnaPH.exe") == 0 && !IsLaunchedFromLauncher()) {
             MessageBoxW(NULL, L"Please start the game via RagnaPH Launcher.", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
             ExitProcess(0);
