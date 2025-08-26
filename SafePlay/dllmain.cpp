@@ -270,43 +270,52 @@ static bool VerifyDataIni() {
 // Verify that the current process was started by the official launcher
 static bool IsLaunchedFromLauncher() {
     DWORD pid = GetCurrentProcessId();
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE)
-        return false;
 
-    PROCESSENTRY32W pe{};
-    pe.dwSize = sizeof(pe);
-    DWORD parentPid = 0;
+    // Walk up the process tree and look for the official launcher anywhere in
+    // the ancestry.  Some systems spawn the game through intermediate helper
+    // processes, so checking only the direct parent can lead to false
+    // positives.
+    for (int depth = 0; depth < 10 && pid; ++depth) {
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snap == INVALID_HANDLE_VALUE)
+            return false;
 
-    if (Process32FirstW(snap, &pe)) {
-        do {
-            if (pe.th32ProcessID == pid) {
-                parentPid = pe.th32ParentProcessID;
-                break;
+        PROCESSENTRY32W pe{};
+        pe.dwSize = sizeof(pe);
+        DWORD parentPid = 0;
+        wchar_t parentName[MAX_PATH] = {0};
+
+        if (Process32FirstW(snap, &pe)) {
+            do {
+                if (pe.th32ProcessID == pid) {
+                    parentPid = pe.th32ParentProcessID;
+                    break;
+                }
+            } while (Process32NextW(snap, &pe));
+
+            if (parentPid) {
+                Process32FirstW(snap, &pe);
+                do {
+                    if (pe.th32ProcessID == parentPid) {
+                        wcsncpy_s(parentName, pe.szExeFile, _TRUNCATE);
+                        break;
+                    }
+                } while (Process32NextW(snap, &pe));
             }
-        } while (Process32NextW(snap, &pe));
+        }
+
+        CloseHandle(snap);
+
+        if (!parentPid)
+            return false;
+
+        if (_wcsicmp(parentName, L"RagnaPH Launcher.exe") == 0)
+            return true;
+
+        pid = parentPid;
     }
 
-    CloseHandle(snap);
-    if (!parentPid)
-        return false;
-
-    HANDLE hParent = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parentPid);
-    if (!hParent)
-        return false;
-
-    wchar_t path[MAX_PATH];
-    DWORD size = MAX_PATH;
-    bool ok = false;
-
-    if (QueryFullProcessImageNameW(hParent, 0, path, &size)) {
-        const wchar_t* name = PathFindFileNameW(path);
-        if (_wcsicmp(name, L"RagnaPH Launcher.exe") == 0)
-            ok = true;
-    }
-
-    CloseHandle(hParent);
-    return ok;
+    return false;
 }
 
 // Function prototypes
