@@ -572,7 +572,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         Gdiplus::GdiplusStartupInput gdiplusStartupInput;
         Gdiplus::GdiplusStartup(&gGdiplusToken, &gdiplusStartupInput, NULL);
 
-        g_hProgressDone = CreateEvent(NULL, TRUE, FALSE, NULL);
+        g_hProgressDone = CreateEvent(NULL, FALSE, FALSE, NULL);
         // Show loading popup without blocking game startup
         HANDLE hPopup = CreateThread(NULL, 0, LoadingPopupThread, NULL, 0, NULL);
 
