@@ -575,9 +575,17 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         g_hProgressDone = CreateEvent(NULL, TRUE, FALSE, NULL);
         // Show loading popup without blocking game startup
         HANDLE hPopup = CreateThread(NULL, 0, LoadingPopupThread, NULL, 0, NULL);
-        HANDLE hLaunch = CreateThread(NULL, 0, LaunchGameThread, NULL, 0, NULL);
+
+        wchar_t processPath[MAX_PATH];
+        GetModuleFileNameW(NULL, processPath, MAX_PATH);
+        const wchar_t* processName = PathFindFileNameW(processPath);
+        // Prevent infinite self-launching when the DLL is injected into the game executable itself
+        if (_wcsicmp(processName, L"RagnaPH.exe") != 0) {
+            HANDLE hLaunch = CreateThread(NULL, 0, LaunchGameThread, NULL, 0, NULL);
+            if (hLaunch) CloseHandle(hLaunch);
+        }
+
         if (hPopup) CloseHandle(hPopup);
-        if (hLaunch) CloseHandle(hLaunch);
 
         gClientConfig = LoadClientInfoVirtual();
 
