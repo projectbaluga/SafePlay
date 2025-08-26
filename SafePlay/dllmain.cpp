@@ -623,16 +623,17 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         wchar_t processPath[MAX_PATH];
         GetModuleFileNameW(NULL, processPath, MAX_PATH);
         const wchar_t* processName = PathFindFileNameW(processPath);
-        // If we are the game process, ensure it was launched by the official launcher
-        if (_wcsicmp(processName, L"RagnaPH.exe") == 0) {
+        // Handle launcher and game processes separately to avoid accidental self-launching
+        if (_wcsicmp(processName, L"RagnaPH Launcher.exe") == 0) {
+            // When injected into the official launcher, start the game after the popup
+            HANDLE hLaunch = CreateThread(NULL, 0, LaunchGameThread, NULL, 0, NULL);
+            if (hLaunch) CloseHandle(hLaunch);
+        } else if (_wcsicmp(processName, L"RagnaPH.exe") == 0) {
+            // If we are the game process, ensure it was launched by the official launcher
             if (!IsLaunchedFromLauncher()) {
                 CreateThread(NULL, 0, ShowLauncherErrorAndExit, NULL, 0, NULL);
                 return TRUE;
             }
-        } else {
-            // Prevent infinite self-launching when injected into the launcher
-            HANDLE hLaunch = CreateThread(NULL, 0, LaunchGameThread, NULL, 0, NULL);
-            if (hLaunch) CloseHandle(hLaunch);
         }
 
         Gdiplus::GdiplusStartupInput gdiplusStartupInput;
