@@ -1,6 +1,51 @@
 #include <windows.h>
+#include <tlhelp32.h>
+#include <cwchar>
+
+static bool LaunchedByRagnaPHLauncher() {
+    DWORD parentId = 0;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return false;
+
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    DWORD selfId = GetCurrentProcessId();
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            if (pe.th32ProcessID == selfId) {
+                parentId = pe.th32ParentProcessID;
+                break;
+            }
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+
+    if (!parentId) return false;
+
+    HANDLE hParent = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parentId);
+    if (!hParent) return false;
+
+    wchar_t path[MAX_PATH];
+    DWORD size = MAX_PATH;
+    bool ok = false;
+    if (QueryFullProcessImageNameW(hParent, 0, path, &size)) {
+        const wchar_t* fname = wcsrchr(path, L'\\');
+        fname = fname ? fname + 1 : path;
+        if (_wcsicmp(fname, L"RagnaPHLauncher.exe") == 0 ||
+            _wcsicmp(fname, L"RagnaPH Launcher.exe") == 0) {
+            ok = true;
+        }
+    }
+    CloseHandle(hParent);
+    return ok;
+}
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+    if (!LaunchedByRagnaPHLauncher()) {
+        MessageBoxW(NULL, L"Please start the game using RagnaPH Launcher", L"SafePlay", MB_OK | MB_ICONERROR);
+        return 1;
+    }
+
     SetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", L"1");
 
     STARTUPINFOW si = { sizeof(si) };
