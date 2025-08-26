@@ -327,6 +327,26 @@ static bool IsLaunchedFromLauncher() {
         pid = parentPid;
     }
 
+    // If no launcher is found in the ancestry, allow the game to start when
+    // another instance of RagnaPH.exe is already running. This enables
+    // launching additional clients after the first one has been started via
+    // the official launcher, even if the launcher has exited.
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe{};
+        pe.dwSize = sizeof(pe);
+        if (Process32FirstW(snap, &pe)) {
+            do {
+                if (_wcsicmp(pe.szExeFile, L"RagnaPH.exe") == 0 &&
+                    pe.th32ProcessID != GetCurrentProcessId()) {
+                    CloseHandle(snap);
+                    return true;
+                }
+            } while (Process32NextW(snap, &pe));
+        }
+        CloseHandle(snap);
+    }
+
     return false;
 }
 
