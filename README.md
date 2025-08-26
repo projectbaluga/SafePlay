@@ -15,6 +15,7 @@ game process, provides a trusted client configuration, and continuously scans th
 * **Embedded configuration** – `clientinfo.xml` is stored in the DLL and is served from memory so the game always connects to
   the approved server settings.
 * **Integrity check** – the library verifies that `Data.ini` contains the expected resource listing before starting.
+* **Launcher enforcement** – `RagnaPH.exe` only starts when spawned by `RagnaPH Launcher.exe`, preventing manual execution.
 * **API hooking** – kernel32 file APIs are patched via the Import Address Table to redirect file access to the in-memory
   configuration and to hide the virtual file handle.
 * **Background protection thread** – every five seconds the DLL enumerates running processes and evaluates them against several

@@ -267,6 +267,40 @@ static bool VerifyDataIni() {
     return true;
 }
 
+// Determine if the current process was launched by the official launcher
+static bool IsLaunchedFromLauncher() {
+    DWORD pid = GetCurrentProcessId();
+    DWORD parentPid = 0;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe;
+        pe.dwSize = sizeof(pe);
+        if (Process32FirstW(snap, &pe)) {
+            do {
+                if (pe.th32ProcessID == pid) {
+                    parentPid = pe.th32ParentProcessID;
+                    break;
+                }
+            } while (Process32NextW(snap, &pe));
+        }
+        CloseHandle(snap);
+    }
+    if (!parentPid) return false;
+
+    HANDLE hParent = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parentPid);
+    if (!hParent) return false;
+
+    wchar_t path[MAX_PATH];
+    DWORD len = MAX_PATH;
+    bool ok = false;
+    if (QueryFullProcessImageNameW(hParent, 0, path, &len)) {
+        const wchar_t* name = PathFindFileNameW(path);
+        ok = (_wcsicmp(name, L"RagnaPH Launcher.exe") == 0);
+    }
+    CloseHandle(hParent);
+    return ok;
+}
+
 // Function prototypes
 DWORD WINAPI ProtectionThread(LPVOID lpParam);
 DWORD WINAPI ShowErrorAndExit(LPVOID lpParam);
@@ -566,6 +600,14 @@ static DWORD WINAPI LaunchGameThread(LPVOID) {
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
+        wchar_t processPath[MAX_PATH];
+        GetModuleFileNameW(NULL, processPath, MAX_PATH);
+        const wchar_t* processName = PathFindFileNameW(processPath);
+        if (_wcsicmp(processName, L"RagnaPH.exe") == 0 && !IsLaunchedFromLauncher()) {
+            MessageBoxW(NULL, L"Please start the game via RagnaPH Launcher.", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+            ExitProcess(0);
+        }
+
         g_hModule = hModule;
         DisableThreadLibraryCalls(hModule);
 
@@ -576,9 +618,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         // Show loading popup without blocking game startup
         HANDLE hPopup = CreateThread(NULL, 0, LoadingPopupThread, NULL, 0, NULL);
 
-        wchar_t processPath[MAX_PATH];
-        GetModuleFileNameW(NULL, processPath, MAX_PATH);
-        const wchar_t* processName = PathFindFileNameW(processPath);
         // Prevent infinite self-launching when the DLL is injected into the game executable itself
         if (_wcsicmp(processName, L"RagnaPH.exe") != 0) {
             HANDLE hLaunch = CreateThread(NULL, 0, LaunchGameThread, NULL, 0, NULL);
