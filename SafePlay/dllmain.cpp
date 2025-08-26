@@ -570,7 +570,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         DisableThreadLibraryCalls(hModule);
 
         if (GetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", NULL, 0) == 0) {
-            MessageBoxW(NULL, L"Please start the game using SafePlay.exe", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+            MessageBoxW(NULL, L"Please start the game using the RagnaPH Launcher", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
             return FALSE;
         }
 

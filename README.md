@@ -9,7 +9,7 @@
 SafePlay is a lightweight Windows DLL designed to keep Ragnarok Online clients and other PC games fair. It injects into the
 game process, provides a trusted client configuration, and continuously scans the system for known cheat tools.
 
-A companion **SafePlay.exe** launcher is provided to start `RagnaPH.exe` from a trusted wrapper.
+A companion **SafePlay.exe** launcher is provided but is intended to be invoked only by the `RagnaPH Launcher` to start `RagnaPH.exe` from a trusted wrapper.
 
 **Target Users:** Game developers, publishers, and server administrators who want to enforce fair play.
 
@@ -44,11 +44,12 @@ A companion **SafePlay.exe** launcher is provided to start `RagnaPH.exe` from a 
 * Extend the banned executable, window, module, or memory signature lists in `SafePlay/dllmain.cpp` to detect additional tools.
 
 ## Usage
-Run `SafePlay.exe` to launch the game. The launcher sets a special
-environment variable that `SafePlay.dll` checks during startup. If
-`RagnaPH.exe` is executed directly the variable is missing, the DLL
-displays an error, and the game terminates. This ensures the client
-always starts through the protected launcher.
+The third-party **RagnaPH Launcher** starts the game by invoking `SafePlay.exe`,
+which sets a special environment variable that `SafePlay.dll` checks during
+startup. Running `SafePlay.exe` directly displays an error and exits. If
+`RagnaPH.exe` is executed without the launcher, the variable is missing, the DLL
+displays an error, and the game terminates. This ensures the client always
+starts through the protected launcher.
 
 ## Roadmap
 - Cross-game compatibility
