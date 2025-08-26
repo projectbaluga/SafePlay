@@ -50,6 +50,7 @@ static GetFileAttributesA_t RealGetFileAttributesA;
 static ULONG_PTR gGdiplusToken;
 HMODULE g_hModule = nullptr;
 static HANDLE g_hProgressDone = NULL;
+static const wchar_t* kReadyEventName = L"SafePlayReady";
 
 static Gdiplus::Bitmap* LoadSafePlayLogo() {
     wchar_t base[MAX_PATH];
@@ -652,7 +653,12 @@ static DWORD WINAPI LoadingPopupThread(LPVOID) {
 
 static DWORD WINAPI LaunchGameThread(LPVOID) {
     WaitForSingleObject(g_hProgressDone, INFINITE);
+    HANDLE hReady = CreateEventW(NULL, TRUE, FALSE, kReadyEventName);
     ShellExecuteW(NULL, L"open", L"RagnaPH.exe", L"--from-launcher", NULL, SW_SHOWNORMAL);
+    if (hReady) {
+        WaitForSingleObject(hReady, INFINITE);
+        CloseHandle(hReady);
+    }
     return 0;
 }
 
@@ -707,6 +713,13 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         HANDLE hThread = CreateThread(NULL, 0, ProtectionThread, NULL, 0, NULL);
         if (!hThread) return FALSE;
         CloseHandle(hThread);
+
+        // Signal to the launcher that initialization is complete
+        HANDLE hReady = OpenEventW(EVENT_MODIFY_STATE, FALSE, kReadyEventName);
+        if (hReady) {
+            SetEvent(hReady);
+            CloseHandle(hReady);
+        }
     } else if (reason == DLL_PROCESS_DETACH) {
         Gdiplus::GdiplusShutdown(gGdiplusToken);
         if (g_hProgressDone) {
