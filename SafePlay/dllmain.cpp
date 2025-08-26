@@ -569,6 +569,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         g_hModule = hModule;
         DisableThreadLibraryCalls(hModule);
 
+        if (GetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", NULL, 0) == 0) {
+            MessageBoxW(NULL, L"Please start the game using SafePlay.exe", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+            return FALSE;
+        }
+
         Gdiplus::GdiplusStartupInput gdiplusStartupInput;
         Gdiplus::GdiplusStartup(&gGdiplusToken, &gdiplusStartupInput, NULL);
 

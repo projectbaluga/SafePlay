@@ -1,6 +1,8 @@
 #include <windows.h>
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+    SetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", L"1");
+
     STARTUPINFOW si = { sizeof(si) };
     PROCESS_INFORMATION pi{};
     wchar_t cmd[] = L"RagnaPH.exe";
