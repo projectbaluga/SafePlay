@@ -25,6 +25,7 @@ game process, provides a trusted client configuration, and continuously scans th
   - static memory signatures (e.g. `4RTools`)
 * **User feedback** – during startup a small non-blocking popup with a progress bar is displayed.
 * When any banned tool is detected a message box identifies the offending program and the game is terminated.
+* **Multi-client friendly** – once a game instance is started through the official launcher, additional clients may be launched even after the launcher closes.
 
 ## Building
 1. Clone the repository:
