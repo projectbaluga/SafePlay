@@ -43,6 +43,13 @@ A companion **SafePlay.exe** launcher is provided to start `RagnaPH.exe` from a 
 * `Data.ini` must have `data.grf` as its first entry – the DLL validates this file before enabling protection.
 * Extend the banned executable, window, module, or memory signature lists in `SafePlay/dllmain.cpp` to detect additional tools.
 
+## Usage
+Run `SafePlay.exe` to launch the game. The launcher sets a special
+environment variable that `SafePlay.dll` checks during startup. If
+`RagnaPH.exe` is executed directly the variable is missing, the DLL
+displays an error, and the game terminates. This ensures the client
+always starts through the protected launcher.
+
 ## Roadmap
 - Cross-game compatibility
 - External configuration file support
