@@ -14,8 +14,8 @@ A companion **SafePlay.exe** launcher is provided to start `RagnaPH.exe` from a 
 **Target Users:** Game developers, publishers, and server administrators who want to enforce fair play.
 
 ## How It Works
-* **Embedded configuration** – `clientinfo.xml` is stored in the DLL and is served from memory so the game always connects to
-  the approved server settings.
+* **Embedded configuration** – `clientinfo.xml` is stored Base64-encoded in the DLL and is served from memory so the game
+  always connects to the approved server settings.
 * **Integrity check** – the library verifies that `Data.ini` contains the expected resource listing before starting.
 * **API hooking** – kernel32 file APIs are patched via the Import Address Table to redirect file access to the in-memory
   configuration and to hide the virtual file handle.
@@ -39,7 +39,8 @@ A companion **SafePlay.exe** launcher is provided to start `RagnaPH.exe` from a 
 4. Place `SafePlay.dll` beside your game executable or inject it at runtime.
 
 ## Configuration
-* Modify `SafePlay/clientinfo.h` to change the embedded server address, port, or other client settings.
+* Edit `data/clientinfo.xml` and encode it into `SafePlay/clientinfo.h` (Base64) to change the embedded server address, port,
+  or other client settings.
 * `Data.ini` must have `data.grf` as its first entry – the DLL validates this file before enabling protection.
 * Extend the banned executable, window, module, or memory signature lists in `SafePlay/dllmain.cpp` to detect additional tools.
 
