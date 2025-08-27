@@ -26,8 +26,28 @@ struct MemoryFile {
     size_t pos;
 };
 
-static MemoryFile gClientInfoFile{ kClientInfoXml, sizeof(kClientInfoXml) - 1, 0 };
+static MemoryFile gClientInfoFile{ nullptr, 0, 0 };
 static HANDLE gClientInfoHandle = (HANDLE)&gClientInfoFile;
+static std::string gClientInfoXml;
+
+static std::string Base64Decode(const std::string& input) {
+    static const std::string chars =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::vector<int> T(256, -1);
+    for (int i = 0; i < 64; i++) T[chars[i]] = i;
+    std::string out;
+    int val = 0, valb = -8;
+    for (unsigned char c : input) {
+        if (T[c] == -1) break;
+        val = (val << 6) + T[c];
+        valb += 6;
+        if (valb >= 0) {
+            out.push_back(char((val >> valb) & 0xFF));
+            valb -= 8;
+        }
+    }
+    return out;
+}
 
 // Original API pointers
 using CreateFileW_t = HANDLE (WINAPI*)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
@@ -239,7 +259,7 @@ struct ClientConfig {
 
 static ClientConfig LoadClientInfoVirtual() {
     ClientConfig cfg{};
-    std::string xml = kClientInfoXml;
+    std::string xml = gClientInfoXml;
     size_t start, end;
     if ((start = xml.find("<address>")) != std::string::npos &&
         (end = xml.find("</address>", start)) != std::string::npos) {
@@ -573,6 +593,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
             MessageBoxW(NULL, L"Please start the game using RagnaPH Launcher", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
             return FALSE;
         }
+
+        gClientInfoXml = Base64Decode(kClientInfoXmlBase64);
+        gClientInfoFile.data = gClientInfoXml.c_str();
+        gClientInfoFile.size = gClientInfoXml.size();
+        gClientInfoFile.pos  = 0;
 
         Gdiplus::GdiplusStartupInput gdiplusStartupInput;
         Gdiplus::GdiplusStartup(&gGdiplusToken, &gdiplusStartupInput, NULL);
