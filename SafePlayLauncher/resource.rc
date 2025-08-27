@@ -1,0 +1,2 @@
+#include "resource.h"
+IDI_SAFEPLAY_ICON ICON "..\\assets\\SafePlay.ico"
