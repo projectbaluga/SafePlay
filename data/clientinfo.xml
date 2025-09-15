@@ -5,8 +5,8 @@
    <servertype>primary</servertype>
    <connection>
       <display>RagnaPH</display>
-      <address>server.ragna.ph</address>
-      <port>6901</port>
+      <address>192.168.88.248</address>
+      <port>6900</port>
       <version>55</version>
       <langtype>11</langtype>
       <registrationweb>https://ragna.ph/?module=account&action=create</registrationweb>
