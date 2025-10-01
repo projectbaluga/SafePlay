@@ -46,7 +46,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         return 1;
     }
 
-    SetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", L"1");
+    if (!SetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", L"1")) {
+        DWORD err = GetLastError();
+        wchar_t message[256];
+        swprintf(message, 256, L"Could not prepare protected environment.\n(Error code: %lu)", err);
+        MessageBoxW(NULL, message, L"SafePlay", MB_OK | MB_ICONERROR);
+        return 1;
+    }
 
     STARTUPINFOW si = { sizeof(si) };
     PROCESS_INFORMATION pi{};
