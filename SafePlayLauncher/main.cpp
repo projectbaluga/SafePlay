@@ -63,28 +63,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         return 1;
     }
 
-    wchar_t eventName[64];
-    swprintf(eventName, 64, L"SafePlayLaunchReady_%lu", pi.dwProcessId);
-    HANDLE hLaunchReadyEvent = CreateEventW(NULL, TRUE, FALSE, eventName);
-    if (hLaunchReadyEvent) {
-        const DWORD kLaunchAckTimeoutMs = 15000;
-        DWORD waitResult = WaitForSingleObject(hLaunchReadyEvent, kLaunchAckTimeoutMs);
-        if (waitResult == WAIT_OBJECT_0) {
-            OutputDebugStringW(L"SafePlayLauncher: Launch acknowledgment received.\n");
-        } else if (waitResult == WAIT_TIMEOUT) {
-            OutputDebugStringW(L"SafePlayLauncher: Launch acknowledgment timed out.\n");
-        } else {
-            wchar_t debugMsg[128];
-            swprintf(debugMsg, 128, L"SafePlayLauncher: Launch acknowledgment wait failed (code %lu).\n", GetLastError());
-            OutputDebugStringW(debugMsg);
-        }
-        CloseHandle(hLaunchReadyEvent);
-    } else {
-        wchar_t debugMsg[128];
-        swprintf(debugMsg, 128, L"SafePlayLauncher: Failed to create launch event (code %lu).\n", GetLastError());
-        OutputDebugStringW(debugMsg);
-    }
-
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
     return 0;
