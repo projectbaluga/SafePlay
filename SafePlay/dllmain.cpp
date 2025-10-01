@@ -589,9 +589,19 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         g_hModule = hModule;
         DisableThreadLibraryCalls(hModule);
 
-        if (GetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", NULL, 0) == 0) {
-            MessageBoxW(NULL, L"Please start the game using RagnaPH Launcher", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
-            return FALSE;
+        wchar_t processPath[MAX_PATH] = { 0 };
+        GetModuleFileNameW(NULL, processPath, MAX_PATH);
+        const wchar_t* processName = PathFindFileNameW(processPath);
+        bool isLauncherProcess = (_wcsicmp(processName, L"SafePlay.exe") == 0);
+        bool isGameProcess = (_wcsicmp(processName, L"RagnaPH.exe") == 0);
+
+        if (isLauncherProcess) {
+            SetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", L"1");
+        } else if (isGameProcess) {
+            if (GetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", NULL, 0) == 0) {
+                MessageBoxW(NULL, L"Please start the game using RagnaPH Launcher", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+                return FALSE;
+            }
         }
 
         gClientInfoXml = Base64Decode(kClientInfoXmlBase64);
@@ -606,11 +616,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         // Show loading popup without blocking game startup
         HANDLE hPopup = CreateThread(NULL, 0, LoadingPopupThread, NULL, 0, NULL);
 
-        wchar_t processPath[MAX_PATH];
-        GetModuleFileNameW(NULL, processPath, MAX_PATH);
-        const wchar_t* processName = PathFindFileNameW(processPath);
         // Prevent infinite self-launching when the DLL is injected into the game executable itself
-        if (_wcsicmp(processName, L"RagnaPH.exe") != 0) {
+        if (!isGameProcess) {
             HANDLE hLaunch = CreateThread(NULL, 0, LaunchGameThread, NULL, 0, NULL);
             if (hLaunch) CloseHandle(hLaunch);
         }
