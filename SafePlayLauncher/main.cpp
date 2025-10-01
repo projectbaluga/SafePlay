@@ -1,11 +1,31 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #include <cwchar>
+#include <string>
+
+static bool IsLauncherCoLocatedWithRagnaPH() {
+    wchar_t modulePath[MAX_PATH];
+    DWORD len = GetModuleFileNameW(NULL, modulePath, MAX_PATH);
+    if (!len || len >= MAX_PATH) return false;
+
+    wchar_t* lastSlash = wcsrchr(modulePath, L'\\');
+    if (!lastSlash) return false;
+
+    *lastSlash = L'\0';
+
+    std::wstring expectedExecutablePath = modulePath;
+    expectedExecutablePath += L"\\RagnaPH.exe";
+
+    DWORD attrs = GetFileAttributesW(expectedExecutablePath.c_str());
+    return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
 
 static bool LaunchedByRagnaPHLauncher() {
     DWORD parentId = 0;
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE) return false;
+    if (snap == INVALID_HANDLE_VALUE) {
+        return IsLauncherCoLocatedWithRagnaPH();
+    }
 
     PROCESSENTRY32W pe{};
     pe.dwSize = sizeof(pe);
@@ -20,10 +40,14 @@ static bool LaunchedByRagnaPHLauncher() {
     }
     CloseHandle(snap);
 
-    if (!parentId) return false;
+    if (!parentId) {
+        return IsLauncherCoLocatedWithRagnaPH();
+    }
 
     HANDLE hParent = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parentId);
-    if (!hParent) return false;
+    if (!hParent) {
+        return IsLauncherCoLocatedWithRagnaPH();
+    }
 
     wchar_t path[MAX_PATH];
     DWORD size = MAX_PATH;
@@ -37,7 +61,9 @@ static bool LaunchedByRagnaPHLauncher() {
         }
     }
     CloseHandle(hParent);
-    return ok;
+    if (ok) return true;
+
+    return IsLauncherCoLocatedWithRagnaPH();
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
