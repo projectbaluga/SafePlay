@@ -582,6 +582,70 @@ static DWORD WINAPI LaunchGameThread(LPVOID) {
     return 0;
 }
 
+static bool WasStartedBySafePlayWrapper() {
+    const wchar_t* trustedLaunchers[] = {
+        L"SafePlay.exe",
+        L"SafePlayLauncher.exe",
+        L"RagnaPHLauncher.exe",
+        L"RagnaPH Launcher.exe"
+    };
+
+    DWORD visited[16] = {};
+    DWORD pid = GetCurrentProcessId();
+
+    for (int depth = 0; depth < 16; ++depth) {
+        DWORD parentId = 0;
+
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snap == INVALID_HANDLE_VALUE) break;
+
+        PROCESSENTRY32W pe{};
+        pe.dwSize = sizeof(pe);
+        if (Process32FirstW(snap, &pe)) {
+            do {
+                if (pe.th32ProcessID == pid) {
+                    parentId = pe.th32ParentProcessID;
+                    break;
+                }
+            } while (Process32NextW(snap, &pe));
+        }
+        CloseHandle(snap);
+
+        if (!parentId || parentId == pid) break;
+
+        bool alreadyVisited = false;
+        for (int i = 0; i < depth; ++i) {
+            if (visited[i] == parentId) {
+                alreadyVisited = true;
+                break;
+            }
+        }
+        if (alreadyVisited) break;
+        visited[depth] = parentId;
+
+        HANDLE hParent = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parentId);
+        if (hParent) {
+            wchar_t path[MAX_PATH];
+            DWORD size = MAX_PATH;
+            if (QueryFullProcessImageNameW(hParent, 0, path, &size)) {
+                const wchar_t* fname = wcsrchr(path, L'\\');
+                fname = fname ? fname + 1 : path;
+                for (const auto* trusted : trustedLaunchers) {
+                    if (_wcsicmp(fname, trusted) == 0) {
+                        CloseHandle(hParent);
+                        return true;
+                    }
+                }
+            }
+            CloseHandle(hParent);
+        }
+
+        pid = parentId;
+    }
+
+    return false;
+}
+
 // --- MODIFIED DLLMAIN --- //
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
@@ -590,8 +654,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         DisableThreadLibraryCalls(hModule);
 
         if (GetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", NULL, 0) == 0) {
-            MessageBoxW(NULL, L"Please start the game using RagnaPH Launcher", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
-            return FALSE;
+            if (!WasStartedBySafePlayWrapper()) {
+                MessageBoxW(NULL, L"Please start the game using RagnaPH Launcher", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
+                return FALSE;
+            }
+
+            OutputDebugStringW(L"[SafePlay] SAFEPLAY_LAUNCHED missing; trusting parent process chain.\n");
         }
 
         gClientInfoXml = Base64Decode(kClientInfoXmlBase64);
