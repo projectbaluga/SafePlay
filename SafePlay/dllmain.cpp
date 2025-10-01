@@ -19,44 +19,6 @@
 #include "clientinfo.h"
 #include "resource.h"
 
-static bool WasLaunchedBySafePlayLauncher() {
-    DWORD parentId = 0;
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE) return false;
-
-    PROCESSENTRY32W pe{};
-    pe.dwSize = sizeof(pe);
-    DWORD selfId = GetCurrentProcessId();
-    if (Process32FirstW(snap, &pe)) {
-        do {
-            if (pe.th32ProcessID == selfId) {
-                parentId = pe.th32ParentProcessID;
-                break;
-            }
-        } while (Process32NextW(snap, &pe));
-    }
-    CloseHandle(snap);
-
-    if (!parentId) return false;
-
-    HANDLE hParent = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parentId);
-    if (!hParent) return false;
-
-    wchar_t path[MAX_PATH];
-    DWORD size = MAX_PATH;
-    bool launched = false;
-    if (QueryFullProcessImageNameW(hParent, 0, path, &size)) {
-        const wchar_t* fname = wcsrchr(path, L'\\');
-        fname = fname ? fname + 1 : path;
-        if (_wcsicmp(fname, L"SafePlayLauncher.exe") == 0 ||
-            _wcsicmp(fname, L"SafePlay Launcher.exe") == 0) {
-            launched = true;
-        }
-    }
-    CloseHandle(hParent);
-    return launched;
-}
-
 // --- Virtual clientinfo.xml handling ---
 struct MemoryFile {
     const char* data;
@@ -627,20 +589,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
         g_hModule = hModule;
         DisableThreadLibraryCalls(hModule);
 
-        const bool hasLaunchFlag = GetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", NULL, 0) != 0;
-        const bool launchedByParent = WasLaunchedBySafePlayLauncher();
-        if (!hasLaunchFlag && !launchedByParent) {
+        if (GetEnvironmentVariableW(L"SAFEPLAY_LAUNCHED", NULL, 0) == 0) {
             MessageBoxW(NULL, L"Please start the game using RagnaPH Launcher", L"SafePlay", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
             return FALSE;
-        }
-
-        if (!hasLaunchFlag && launchedByParent) {
-            OutputDebugStringW(L"[SafePlay] Launcher detected but SAFEPLAY_LAUNCHED was missing. Continuing startup.\n");
-            MessageBoxW(NULL,
-                L"SafePlay Launcher was detected, but the SAFEPLAY_LAUNCHED flag was missing.\n"
-                L"Please report this to support so we can investigate.",
-                L"SafePlay",
-                MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
         }
 
         gClientInfoXml = Base64Decode(kClientInfoXmlBase64);
