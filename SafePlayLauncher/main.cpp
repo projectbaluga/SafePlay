@@ -42,7 +42,12 @@ static bool LaunchedByRagnaPHLauncher() {
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     if (!LaunchedByRagnaPHLauncher()) {
-        MessageBoxW(NULL, L"Please start the game using RagnaPH Launcher", L"SafePlay", MB_OK | MB_ICONERROR);
+        MessageBoxW(
+            NULL,
+            L"SafePlay keeps RagnaPH secure by only running when launched through the official RagnaPH Launcher.\n\n"
+            L"Please use the RagnaPH Launcher to start the game.",
+            L"SafePlay",
+            MB_OK | MB_ICONINFORMATION);
         return 1;
     }
 
